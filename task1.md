@@ -15,7 +15,13 @@
 
 | Skill | Когда активировать |
 |-------|--------------------|
+| **spec-driven-workflow** | В начале фазы и при каждом переходе между шагами checklist |
 | **systematic-debugging** | При отладке проблем с Docker, Martin, PostgreSQL или OSRM |
+
+### Когда skill указывать явно
+
+- Явно указывать **systematic-debugging**, если сервис не стартует, unhealthy или есть flaky-поведение.
+- Явно указывать **spec-driven-workflow**, если задача длинная и есть риск отклониться от `task1.md`.
 
 ---
 
@@ -28,12 +34,15 @@
 - [ ] Написать docker-compose.dev.yml (dev оверрайд — `command: npm run dev`)
 - [ ] Создать .env.example (все ключи из cursor.md)
 - [ ] Dockerfile для бэкенда (node:20-slim + Chromium/nss/freetype/harfbuzz/fonts + ffmpeg + dumb-init)
-- [ ] Dockerfile для фронтенда (node:20-alpine для билда, nginx:alpine для статики в prod)
+- [ ] Dockerfile для фронтенда (node:20-alpine для билда, runtime контейнер только для фронта; это не reverse proxy)
 - [ ] Конфиг для **хостового** nginx (`/etc/nginx/sites-available/mapvideo.gyhyry.ru.conf`)
-- [ ] Конфиг Martin (martin/config.yaml)
+- [ ] Конфиг Martin (martin/config.yaml) — подключение к БД `gis`, не к `mapvideo`
+- [ ] Init-скрипт PostgreSQL (`db/init/01-create-gis.sql`) — создаёт БД `gis` с PostGIS/hstore
 - [ ] Скрипт импорта OSM (scripts/import-osm.sh) — использует OSM_PBF_FILE, делает symlink в region.osm.pbf для OSRM
-- [ ] Healthcheck у каждого сервиса
-- [ ] Проверить что все сервисы поднимаются (`docker compose ps` → все healthy)
+- [ ] Healthcheck у каждого сервиса (postgres, martin, osrm, backend, frontend)
+- [ ] Проверить что все сервисы поднимаются:
+  - до импорта OSM допускается `martin` в `unhealthy`,
+  - после `./scripts/import-osm.sh` и перезапуска — `docker compose ps` показывает все `healthy`
 
 ---
 
@@ -52,6 +61,8 @@
 
 ## Docker Compose — все сервисы
 
+**КРИТИЧНО:** `nginx` как Docker-сервис не использовать и не добавлять в `docker-compose*.yml`. Для mapvideo используется только хостовой `nginx`.
+
 **Принцип:** все сервисы биндятся на `127.0.0.1:PORT` хоста — снаружи их не видно. Хостовой nginx сервера проксирует домен `mapvideo.gyhyry.ru` (HTTPS 443) на эти локальные порты. Nginx как docker-сервис **не поднимаем** — он уже есть на хосте и обслуживает maps.gyhyry.ru. Photon тоже не поднимаем — геокодер работает через публичный https://photon.komoot.io/api, вызов идёт с бэкенда.
 
 ```yaml
@@ -65,6 +76,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro   # SQL-скрипт создаёт БД gis
     ports:
       - "127.0.0.1:5432:5432"
     networks: [mapvideo_net]
@@ -84,15 +96,27 @@ services:
     networks: [mapvideo_net]
     depends_on:
       postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   osrm:
     image: ghcr.io/project-osrm/osrm-backend:v5.27.1
-    command: osrm-routed --algorithm mld /data/region.osrm
+    command: osrm-routed --algorithm mld ${OSRM_DATA_PATH}
     volumes:
       - ./osm-data:/data
     ports:
       - "127.0.0.1:5000:5000"
     networks: [mapvideo_net]
+    healthcheck:
+      # OSRM-routed не имеет /health — проверяем живучесть известным маршрутом Москва→СПб
+      test: ["CMD-SHELL", "wget -qO- 'http://localhost:5000/route/v1/driving/37.618,55.751;30.315,59.939' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   backend:
     build: ./backend
@@ -116,6 +140,11 @@ services:
       - "127.0.0.1:3000:3000"
     networks: [mapvideo_net]
     depends_on: [backend]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   mapvideo_net:
@@ -125,14 +154,38 @@ volumes:
   postgres_data:
 ```
 
-**docker-compose.dev.yml** — dev оверрайд. Порты уже открыты наружу на localhost (см. выше), тут только `command`:
+Отдельная БД `gis` создаётся init-скриптом PostgreSQL. Положить файл в `./db/init/01-create-gis.sql` (volume подключён в docker-compose выше → PostgreSQL выполнит его при первом старте контейнера):
+
+```sql
+-- db/init/01-create-gis.sql
+CREATE DATABASE gis;
+\c gis
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS hstore;
+```
+
+**docker-compose.dev.yml** — dev override. Порты уже открыты на localhost (см. выше). Монтируем исходники, чтобы работал hot-reload (`tsx watch` для бэкенда, Vite dev server для фронта):
 
 ```yaml
 services:
   backend:
     command: npm run dev
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json
+      - ./backend/tsconfig.json:/app/tsconfig.json
+    environment:
+      NODE_ENV: development
   frontend:
-    command: npm run dev
+    command: npm run dev -- --host 0.0.0.0
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+    environment:
+      NODE_ENV: development
 ```
 
 Запуск dev: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`
@@ -165,25 +218,26 @@ CMD ["node", "dist/index.js"]
 
 ## Конфиг Martin
 
-**ВАЖНО:** Martin использует `postgresql://`, не `postgis://`
-Подключение через Unix сокет не работает в Docker — использовать TCP,
-но предварительно добавить пользователя в pg_hba.conf с методом `trust`:
+**ВАЖНО:** Martin подключается к БД `gis` (там лежат импортированные OSM-таблицы
+`planet_osm_*`), а **не** к основной `mapvideo`. Строка подключения — стандартная
+`postgresql://user:password@host:port/db`, никаких правок `pg_hba.conf` / `trust`
+не требуется: образ `postgis/postgis` из коробки работает с парольной аутентификацией.
 
 ```yaml
 # martin/config.yaml
 postgres:
-  connection_string: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+  connection_string: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_GIS_DB}?sslmode=disable
   auto_publish: true
 
 cache:
   size_mb: 1024
 ```
 
-Генерировать конфиг автоматически после первого запуска:
+Генерировать конфиг автоматически после первого запуска можно так:
 ```bash
 docker compose run --rm martin \
-  postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable \
-  --save-config /config/config.yaml --auto-bounds skip
+  --save-config /config/config.yaml \
+  postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_GIS_DB}?sslmode=disable
 ```
 
 ---
@@ -210,11 +264,12 @@ fi
 CACHE_MB=$([ "$(uname -m)" = "x86_64" ] && echo 4000 || echo 2000)
 
 # Импорт в PostgreSQL (osm2pgsql запускается в отдельном контейнере)
+# Используем официальный образ osm2pgsql
 echo "Импортирую OSM данные в PostgreSQL..."
 docker run --rm --network mapvideo_mapvideo_net \
   -v $(pwd)/osm-data:/osm-data \
   -e PGPASSWORD=${POSTGRES_PASSWORD} \
-  iboates/osm2pgsql:latest osm2pgsql \
+  openstreetmap/osm2pgsql:latest osm2pgsql \
     --create --slim -G --hstore \
     -C ${CACHE_MB} \
     -H postgres -U ${POSTGRES_USER} -d ${POSTGRES_GIS_DB} \
@@ -242,15 +297,17 @@ echo "Импорт завершён"
 - Для России: 20-40 мин. Для planet: несколько часов
 - Флаг `--tag-transform-script` НЕ использовать — файл lua не установлен
 - Параметр `-C` — размер кеша в MB, подбирается по доступной RAM (половина, но не меньше 2000)
-- OSRM preprocessing переименовывает pbf в `region.osrm.*` — файл имени не зависит от того Россия это или planet
+- OSRM preprocessing создаёт `region.osrm.*` через symlink `region.osm.pbf` — имя выходного файла всегда стабильное
 - После импорта индексы создаются автоматически
-- Для Photon нужен отдельный pre-built индекс (см. задачу ниже)
+- Photon в compose не поднимается (используем публичный сервис через бэкенд-прокси)
 
 ---
 
 ## Конфиг Nginx (только хостовой)
 
 Nginx **в docker compose нет**. Наружу 80/443 слушает хостовой nginx сервера (тот же, что обслуживает maps.gyhyry.ru). Создаём отдельный файл только для нашего домена — существующие конфиги не трогаем.
+
+**КРИТИЧНО:** второй `nginx` в Docker запрещён.
 
 ```nginx
 # /etc/nginx/sites-available/mapvideo.gyhyry.ru.conf
@@ -290,6 +347,17 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+    }
+
+    # Ассеты (иконки/шрифты) — раздаёт бэкенд из /app/assets
+    # Важно для PixiJS и @font-face: /assets/icons/* и /assets/fonts/*
+    location /assets/ {
+        proxy_pass http://127.0.0.1:3001/assets/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        add_header Cache-Control "public, max-age=31536000, immutable";
     }
 
     # Тайлы Martin
@@ -355,20 +423,27 @@ curl https://mapvideo.gyhyry.ru/api/health
 - Порт 3000 внутри контейнера, снаружи 3002 — не путать
 
 **osm2pgsql не находит базу:**
-- PostgreSQL должен принимать подключения — проверить `pg_hba.conf`
+- Проверить, что контейнер `postgres` healthy и переменные `POSTGRES_*` совпадают с `.env`
 - Использовать флаг `-H postgres` (имя контейнера) вместо `localhost`
+- Убедиться, что импорт идёт в `${POSTGRES_GIS_DB}`, а не в `${POSTGRES_DB}`
+
+**Martin unhealthy сразу после `docker compose up`:**
+- До импорта OSM это ожидаемо: в БД `gis` ещё нет `planet_osm_*` таблиц
+- После `./scripts/import-osm.sh` и перезапуска `martin` healthcheck должен позеленеть
 
 **OSRM не запускается:**
-- Данные нужно предварительно обработать:
+- Данные нужно предварительно обработать через `./scripts/import-osm.sh`
+- Если запускаете руками, используйте стабильное имя через symlink:
   ```bash
-  docker run -v ./osm-data:/data ghcr.io/project-osrm/osrm-backend \
-    osrm-extract -p /opt/car.lua /data/planet-latest.osm.pbf
-  docker run -v ./osm-data:/data ghcr.io/project-osrm/osrm-backend \
-    osrm-partition /data/planet-latest.osrm
-  docker run -v ./osm-data:/data ghcr.io/project-osrm/osrm-backend \
-    osrm-customize /data/planet-latest.osrm
+  ln -sf russia-260419.osm.pbf ./osm-data/region.osm.pbf
+  docker run --rm -v $(pwd)/osm-data:/data ghcr.io/project-osrm/osrm-backend:v5.27.1 \
+    osrm-extract -p /opt/car.lua /data/region.osm.pbf
+  docker run --rm -v $(pwd)/osm-data:/data ghcr.io/project-osrm/osrm-backend:v5.27.1 \
+    osrm-partition /data/region.osrm
+  docker run --rm -v $(pwd)/osm-data:/data ghcr.io/project-osrm/osrm-backend:v5.27.1 \
+    osrm-customize /data/region.osrm
   ```
-  Это занимает 15-30 минут.
+  Для России обычно 20-40 минут.
 
 ---
 

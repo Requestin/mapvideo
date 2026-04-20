@@ -20,6 +20,12 @@
 |-------|--------------------|
 | **mastering-typescript** | При написании TypeScript/React кода |
 | **frontend-design** | При создании UI модального окна настроек видео |
+| **spec-driven-workflow** | Для контроля последовательности задач и фиксации статуса фазы |
+
+### Когда skill указывать явно
+
+- Явно указывать **frontend-design**, если спор по UX модального окна/контролов.
+- Явно указывать **spec-driven-workflow**, если нужно аккуратно синхронизировать изменения с `task7.md`.
 
 ---
 
@@ -41,35 +47,39 @@
 ## Хранение настроек
 
 ```typescript
-interface НастройкиВидео {
-  разрешение: '1920x1080' | '3840x2160';
+interface VideoSettings {
+  resolution: '1920x1080' | '3840x2160';
   fps: 25 | 30 | 50 | 60;
-  формат: 'mp4' | 'mxf';
-  длительность: number;       // секунды, 3-60
-  тема: 'light' | 'dark';
-  дыханиеКамеры: number;      // 0-100
+  format: 'mp4' | 'mxf';
+  duration: number;       // seconds, 3-60
+  theme: 'light' | 'dark';
+  cameraBreathing: number;      // 0-100
 }
 
-const НАСТРОЙКИ_ПО_УМОЛЧАНИЮ: НастройкиВидео = {
-  разрешение: '1920x1080',
+const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
+  resolution: '1920x1080',
   fps: 25,
-  формат: 'mp4',
-  длительность: 10,
-  тема: 'dark',
-  дыханиеКамеры: 0,
+  format: 'mp4',
+  duration: 10,
+  theme: 'dark',
+  cameraBreathing: 0,
 };
 ```
+
+Семантика `fps`:
+- для MP4: `25/30/50/60` трактуются как progressive (`25p/30p/50p/60p`);
+- для MXF: `50` трактуется как `50i` (через `tinterlace` в `task8.md`), остальные остаются progressive.
 
 ---
 
 ## Переключение темы карты
 
-Связь с task4.md: там реализованы объекты `СТИЛЬ_ТЁМНОЙ_КАРТЫ`
-и `СТИЛЬ_СВЕТЛОЙ_КАРТЫ`. Здесь просто вызываем:
+Связь с task4.md: там реализованы объекты `DARK_MAP_STYLE`
+и `LIGHT_MAP_STYLE`. Здесь просто вызываем:
 
 ```typescript
-function применитьТемуКарты(тема: 'light' | 'dark'): void {
-  карта.setStyle(тема === 'dark' ? СТИЛЬ_ТЁМНОЙ_КАРТЫ : СТИЛЬ_СВЕТЛОЙ_КАРТЫ);
+function applyMapTheme(theme: 'light' | 'dark'): void {
+  map.setStyle(theme === 'dark' ? DARK_MAP_STYLE : LIGHT_MAP_STYLE);
 }
 // Вызывается немедленно при изменении radio кнопки — live preview
 ```
@@ -78,40 +88,41 @@ function применитьТемуКарты(тема: 'light' | 'dark'): void 
 
 ## Дыхание камеры
 
-Анимация активна **только пока открыто меню** настроек видео.
-При закрытии меню — останавливается и карта возвращается в исходное состояние.
+Анимация активна **только пока открыто меню** настроек видео (режим preview).
+Сохранённое значение `cameraBreathing` входит в `VideoSettings` и используется при серверном
+рендере в `task8.md`, даже когда меню закрыто.
 
 ```typescript
-let дыханиеАктивно = false;
-let базовыйЗум = 0;
-let gsapДыхание: gsap.core.Tween | null = null;
+let isBreathingActive = false;
+let baseZoom = 0;
+let breathingTween: gsap.core.Tween | null = null;
 
-function запуститьДыхание(сила: number): void {
-  if (сила === 0) {
-    остановитьДыхание();
+function startCameraBreathing(strength: number): void {
+  if (strength === 0) {
+    stopCameraBreathing();
     return;
   }
 
-  базовыйЗум = карта.getZoom();
-  const амплитуда = (сила / 100) * 0.4;       // максимум ±0.4 зума
-  const скорость = 4 - (сила / 100) * 2.5;    // 1.5-4 секунды
+  baseZoom = map.getZoom();
+  const amplitude = (strength / 100) * 0.4;       // max ±0.4 zoom
+  const duration = 4 - (strength / 100) * 2.5;    // 1.5-4 seconds
 
-  gsapДыхание = gsap.to({ зум: базовыйЗум }, {
-    зум: базовыйЗум + амплитуда,
-    duration: скорость,
+  breathingTween = gsap.to({ zoom: baseZoom }, {
+    zoom: baseZoom + amplitude,
+    duration,
     repeat: -1,
     yoyo: true,
     ease: 'sine.inOut',
     onUpdate: function() {
-      карта.setZoom(this.targets()[0].зум);
+      map.setZoom(this.targets()[0].zoom);
     },
   });
 }
 
-function остановитьДыхание(): void {
-  gsapДыхание?.kill();
-  gsapДыхание = null;
-  if (базовыйЗум > 0) карта.setZoom(базовыйЗум);
+function stopCameraBreathing(): void {
+  breathingTween?.kill();
+  breathingTween = null;
+  if (baseZoom > 0) map.setZoom(baseZoom);
 }
 
 // При изменении ползунка — перезапустить с новой силой
@@ -124,12 +135,12 @@ function остановитьДыхание(): void {
 ## Валидация длительности
 
 ```typescript
-function валидироватьДлительность(значение: string): number | null {
-  const число = parseInt(значение, 10);
-  if (isNaN(число)) return null;
-  if (число < 3) return 3;
-  if (число > 60) return 60;
-  return число;
+function validateDuration(value: string): number | null {
+  const num = parseInt(value, 10);
+  if (isNaN(num)) return null;
+  if (num < 3) return 3;
+  if (num > 60) return 60;
+  return num;
 }
 // Поле показывает ошибку если введено значение вне диапазона 3-60
 ```
@@ -141,7 +152,7 @@ function валидироватьДлительность(значение: stri
 1. **Кнопка "Сохранить"** — применяет настройки и закрывает меню.
    Тема и дыхание уже применены в live режиме, остальное просто сохраняется.
 
-2. **Кнопка "Сбросить"** — возвращает к `НАСТРОЙКИ_ПО_УМОЛЧАНИЮ`.
+2. **Кнопка "Сбросить"** — возвращает к `DEFAULT_VIDEO_SETTINGS`.
    Тему и дыхание также сбрасывает с live preview.
 
 3. **Дыхание** при закрытии меню кнопкой × или кликом вне модала —

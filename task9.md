@@ -19,6 +19,16 @@
 | **owasp-security** | При финальном security review |
 | **code-review-excellence** | При финальном code review перед деплоем |
 | **systematic-debugging** | При отладке edge cases |
+| **code-reviewer** | Для итоговой приоритизации дефектов/рисков по изменениям перед релизом |
+| **testing-reviewer** | Для аудита полноты тестов и выявления слабых/хрупких проверок |
+| **api-contract-checker** | Для финальной сверки API контрактов frontend/backend |
+| **spec-driven-workflow** | Для контроля закрытия фазы и фиксации финального состояния документации |
+
+### Когда skill указывать явно
+
+- Явно указывать **code-reviewer**/**testing-reviewer** перед финальным merge/deploy.
+- Явно указывать **api-contract-checker**, если были правки API в предыдущих фазах.
+- Явно указывать **owasp-security**, если есть auth/upload/download/network-sensitive изменения.
 
 ---
 
@@ -44,7 +54,7 @@
 
 ```typescript
 // Типы уведомлений
-тип: 'ошибка' | 'предупреждение' | 'успех'
+type: 'error' | 'warning' | 'success'
 
 // Примеры сообщений:
 // "Не удалось найти адрес. Проверьте подключение к интернету."
@@ -121,6 +131,7 @@
 ### 1. Nginx конфиг (хостовой — docker-nginx нет)
 
 **КРИТИЧНО: не редактировать существующие конфиги maps.gyhyry.ru!** Создать только новый файл.
+**КРИТИЧНО: не поднимать nginx в Docker.** Используется только системный nginx хоста.
 
 ```bash
 sudo nano /etc/nginx/sites-available/mapvideo.gyhyry.ru.conf
@@ -142,7 +153,7 @@ sudo certbot --nginx -d mapvideo.gyhyry.ru
 cd ~/mapvideo
 git pull
 cp .env.example .env      # если .env ещё не создан
-# Заполнить .env — пароли, SESSION_SECRET, COOKIE_SECURE=true, OSM_PBF_FILE
+# Заполнить .env — POSTGRES_PASSWORD, ADMIN_PASSWORD, COOKIE_SECURE=true, OSM_PBF_FILE
 nano .env
 ```
 
@@ -181,8 +192,7 @@ curl "https://photon.komoot.io/api?q=Москва&limit=1"
 ## Что делать после деплоя
 
 1. Зайти под admin, создать пользователей для редакции
-2. Передать реальные PNG ассеты (огонь, взрыв, землетрясение, транспорт)
-   и заменить placeholder'ы в `/assets/`
+2. Проверить что ассеты из `/assets/` корректно читаются фронтендом и рендером
 3. При необходимости настроить стиль карты через Maputnik
 
 ---

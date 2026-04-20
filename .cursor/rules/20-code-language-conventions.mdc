@@ -1,0 +1,13 @@
+---
+description: Naming and language conventions from project docs
+alwaysApply: true
+---
+
+# Code and Naming Conventions
+
+- Use English for identifiers: variables, functions, classes, types, file names, flags, env keys.
+- Prefer English for code comments in source files; Russian comments are allowed in project docs and task snippets.
+- Use Russian only for user-facing error texts and file logs.
+- Keep changes surgical; do not refactor unrelated code.
+- Respect existing project structure and module boundaries from `cursor.md`.
+- Validate changes with relevant checks before finalizing.

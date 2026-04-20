@@ -22,12 +22,21 @@
 | **mastering-typescript** | При написании TypeScript/React кода |
 | **frontend-design** | При создании UI меню настроек точек и подписей |
 | **systematic-debugging** | При отладке анимаций PixiJS + GSAP |
+| **api-contract-checker** | При изменении контракта `GET /api/geocode/search` и формата результатов |
+| **spec-driven-workflow** | Для синхронного выполнения задач фазы и обновления checklist |
+
+### Когда skill указывать явно
+
+- Явно указывать **api-contract-checker**, если меняется структура ответа геосаджеста.
+- Явно указывать **systematic-debugging**, если анимации/drag-drop работают нестабильно.
+- Явно указывать **frontend-design**, если есть неоднозначность в UI настроек элемента.
 
 ---
 
 ## Задачи
 
 - [ ] Бэкенд: GET /api/geocode/search (проксирование Photon)
+- [ ] Фронтенд: загрузка шрифтов при старте (`GET /api/fonts` + `@font-face`, `await document.fonts.ready`)
 - [ ] Модальное окно "Добавить точку" с геосаджестом
 - [ ] Добавление точки на PixiJS слой
 - [ ] Автоматическое добавление подписи рядом с точкой
@@ -58,24 +67,28 @@
 
 const PHOTON_URL = process.env.PHOTON_URL || 'https://photon.komoot.io/api';
 
-router.get('/geocode/search', проверитьТокен, async (req, res) => {
+router.get('/geocode/search', requireAuth, async (req, res) => {
   const { q, limit = 5 } = req.query;
-  const ответ = await fetch(`${PHOTON_URL}?q=${encodeURIComponent(String(q))}&limit=${limit}&lang=ru`);
-  const данные = await ответ.json();
+  const response = await fetch(`${PHOTON_URL}?q=${encodeURIComponent(String(q))}&limit=${limit}&lang=ru`);
+  const data = await response.json();
 
-  const результаты = данные.features.map((f: any) => ({
-    название: f.properties.name,
-    полноеНазвание: [f.properties.name, f.properties.city,
-                     f.properties.country].filter(Boolean).join(', '),
-    координаты: {
+  const results = data.features.map((f: any) => ({
+    name: f.properties.name,
+    fullName: [f.properties.name, f.properties.city,
+      f.properties.country].filter(Boolean).join(', '),
+    coordinates: {
       lng: f.geometry.coordinates[0],
       lat: f.geometry.coordinates[1],
     },
   }));
 
-  res.json({ результаты });
+  res.json({ results });
 });
 ```
+
+Для защиты публичного Photon от abuse добавить мягкий лимит на прокси-эндпоинт
+(`GET /api/geocode/search`), например 60 req/min на пользователя/IP, с сообщением
+`{ error: "Слишком много запросов, попробуйте позже" }`.
 
 ---
 
@@ -83,12 +96,12 @@ router.get('/geocode/search', проверитьТокен, async (req, res) => 
 
 ```typescript
 // Глобальное состояние карты — все элементы
-interface СостояниеРедактора {
-  элементы: Map<string, ЭлементКарты>;
-  добавитьТочку: (данные: ДанныеТочки) => void;
-  обновитьЭлемент: (id: string, настройки: Partial<НастройкиЭлемента>) => void;
-  удалитьЭлемент: (id: string) => void;
-  переместитьЭлемент: (id: string, координаты: Координаты) => void;
+interface EditorState {
+  elements: Map<string, MapElement>;
+  addPoint: (data: PointData) => void;
+  updateElement: (id: string, settings: Partial<ElementSettings>) => void;
+  deleteElement: (id: string) => void;
+  moveElement: (id: string, coordinates: Coordinates) => void;
 }
 ```
 
@@ -103,104 +116,110 @@ interface СостояниеРедактора {
 ### Мигающая точка (процедурная)
 
 ```typescript
-function создатьМигающуюТочку(настройки: НастройкиТочки): PIXI.Container {
-  const контейнер = new PIXI.Container();
+function createBlinkingPoint(settings: PointSettings): PIXI.Container {
+  const container = new PIXI.Container();
 
   // Пульсирующий круг (расходится наружу, затухает)
-  const пульс = new PIXI.Graphics();
-  пульс.beginFill(настройки.цвет, 0.3);
-  пульс.drawCircle(0, 0, настройки.размер);
-  пульс.endFill();
+  const pulse = new PIXI.Graphics();
+  pulse.beginFill(settings.color, 0.3);
+  pulse.drawCircle(0, 0, settings.size);
+  pulse.endFill();
 
   // Основной круг
-  const круг = new PIXI.Graphics();
-  круг.beginFill(настройки.цвет, настройки.прозрачность / 100);
-  круг.drawCircle(0, 0, настройки.размер);
-  круг.endFill();
-  if (настройки.окантовка.включена) {
-    круг.lineStyle(настройки.окантовка.размер, настройки.окантовка.цвет,
-                   настройки.окантовка.прозрачность / 100);
-    круг.drawCircle(0, 0, настройки.размер);
+  const core = new PIXI.Graphics();
+  core.beginFill(settings.color, settings.opacity / 100);
+  core.drawCircle(0, 0, settings.size);
+  core.endFill();
+  if (settings.stroke.enabled) {
+    core.lineStyle(settings.stroke.size, settings.stroke.color,
+      settings.stroke.opacity / 100);
+    core.drawCircle(0, 0, settings.size);
   }
 
-  контейнер.addChild(пульс);
-  контейнер.addChild(круг);
+  container.addChild(pulse);
+  container.addChild(core);
 
-  // GSAP анимация пульса
-  const скорость = 1.5 / (настройки.скорость / 50);
+  // GSAP анимация пульса — ОБЯЗАТЕЛЬНО fromTo, иначе на repeat:-1 значения
+  // останутся как на конце первого цикла и анимации не будет.
+  const speed = 1.5 / (settings.speed / 50);
   gsap.timeline({ repeat: -1 })
-    .to(пульс.scale, { x: 2.5, y: 2.5, duration: скорость, ease: 'power2.out' })
-    .to(пульс, { alpha: 0, duration: скорость, ease: 'power2.out' }, '<');
+    .fromTo(pulse.scale, { x: 1, y: 1 },
+                         { x: 2.5, y: 2.5, duration: speed, ease: 'power2.out' })
+    .fromTo(pulse,       { alpha: 0.3 },
+                         { alpha: 0,        duration: speed, ease: 'power2.out' }, '<');
 
-  return контейнер;
+  return container;
 }
 ```
 
 ### Взрыв (PNG иконка + круги)
 
 ```typescript
-function создатьВзрыв(настройки: НастройкиТочки): PIXI.Container {
-  const контейнер = new PIXI.Container();
+function createExplosion(settings: PointSettings): PIXI.Container {
+  const container = new PIXI.Container();
 
   // Статичная иконка (имена файлов — только английский, см. SPEC.md раздел "Ассеты")
-  const иконка = PIXI.Sprite.from('/assets/icons/explosion.png');
-  иконка.anchor.set(0.5);
-  иконка.scale.set(настройки.размер / 64);
-  иконка.alpha = настройки.прозрачность / 100;
+  const icon = PIXI.Sprite.from('/assets/icons/explosion.png');
+  icon.anchor.set(0.5);
+  icon.scale.set(settings.size / 64);
+  icon.alpha = settings.opacity / 100;
 
   // 3 кольца со сдвигом по времени
   for (let i = 0; i < 3; i++) {
-    const кольцо = new PIXI.Graphics();
-    кольцо.lineStyle(2, 0xFF4400, 0.8);
-    кольцо.drawCircle(0, 0, настройки.размер * 0.5);
-    контейнер.addChild(кольцо);
+    const ring = new PIXI.Graphics();
+    ring.lineStyle(2, 0xFF4400, 0.8);
+    ring.drawCircle(0, 0, settings.size * 0.5);
+    container.addChild(ring);
 
-    const скорость = 1.5 / (настройки.скорость / 50);
-    gsap.timeline({ repeat: -1, delay: i * (скорость / 3) })
-      .fromTo(кольцо.scale, { x: 0.5, y: 0.5 }, { x: 3, y: 3, duration: скорость, ease: 'power1.out' })
-      .fromTo(кольцо, { alpha: 0.8 }, { alpha: 0, duration: скорость, ease: 'power1.out' }, '<');
+    const speed = 1.5 / (settings.speed / 50);
+    gsap.timeline({ repeat: -1, delay: i * (speed / 3) })
+      .fromTo(ring.scale, { x: 0.5, y: 0.5 }, { x: 3, y: 3, duration: speed, ease: 'power1.out' })
+      .fromTo(ring, { alpha: 0.8 }, { alpha: 0, duration: speed, ease: 'power1.out' }, '<');
   }
 
-  контейнер.addChild(иконка);
-  return контейнер;
+  container.addChild(icon);
+  return container;
 }
 ```
 
 ### Огонь (PNG секвенция 150 кадров)
 
 ```typescript
-function создатьОгонь(настройки: НастройкиТочки): PIXI.Container {
+function createFire(settings: PointSettings): PIXI.Container {
   // Файлы: /assets/icons/fire_loop/ — готовая PNG секвенция (имена — английский)
-  const кадры = Array.from({ length: 150 }, (_, i) =>
+  const frames = Array.from({ length: 150 }, (_, i) =>
     PIXI.Texture.from(`/assets/icons/fire_loop/${String(i + 1).padStart(4, '0')}.png`)
   );
 
-  const анимация = new PIXI.AnimatedSprite(кадры);
-  анимация.anchor.set(0.5, 1); // якорь снизу по центру
-  анимация.animationSpeed = настройки.скорость / 50 * 0.5;
-  анимация.loop = true;
-  анимация.play();
-  анимация.scale.set(настройки.размер / 64);
-  анимация.alpha = настройки.прозрачность / 100;
+  const animation = new PIXI.AnimatedSprite(frames);
+  animation.anchor.set(0.5, 1); // bottom center anchor
+  animation.animationSpeed = settings.speed / 50 * 0.5;
+  animation.loop = true;
+  animation.play();
+  animation.scale.set(settings.size / 64);
+  animation.alpha = settings.opacity / 100;
 
-  const контейнер = new PIXI.Container();
-  контейнер.addChild(анимация);
-  return контейнер;
+  const container = new PIXI.Container();
+  container.addChild(animation);
+  return container;
 }
 ```
+
+`fire_loop` содержит 150 кадров (`0001.png`...`0150.png`) — это фиксированное допущение
+для v1 и должно совпадать с фактическими ассетами.
 
 ### Землетрясение (статичная иконка)
 
 ```typescript
-function создатьЗемлетрясение(настройки: НастройкиТочки): PIXI.Container {
-  const иконка = PIXI.Sprite.from('/assets/icons/earthquake.png');
-  иконка.anchor.set(0.5);
-  иконка.scale.set(настройки.размер / 64);
-  иконка.alpha = настройки.прозрачность / 100;
+function createEarthquake(settings: PointSettings): PIXI.Container {
+  const icon = PIXI.Sprite.from('/assets/icons/earthquake.png');
+  icon.anchor.set(0.5);
+  icon.scale.set(settings.size / 64);
+  icon.alpha = settings.opacity / 100;
 
-  const контейнер = new PIXI.Container();
-  контейнер.addChild(иконка);
-  return контейнер;
+  const container = new PIXI.Container();
+  container.addChild(icon);
+  return container;
 }
 ```
 
@@ -214,14 +233,47 @@ Placeholder'ы не нужны.
 
 ---
 
+## Загрузка шрифтов для подписей
+
+`PIXI.Text` рендерит в WebGL и **видит только те шрифты, что загружены в документ** —
+`@font-face` на `document.fonts`. Без этого подпись нарисуется дефолтным шрифтом браузера.
+
+Флоу на фронте (выполняется один раз при старте приложения, до отрисовки первой точки):
+
+```typescript
+// src/services/fonts.ts
+export async function loadFonts(): Promise<FontInfo[]> {
+  const { fonts } = await http.get<{ fonts: FontInfo[] }>('/fonts').then(r => r.data);
+
+  // Вставляем @font-face для каждого файла
+  const style = document.createElement('style');
+  style.textContent = fonts.map(f =>
+    `@font-face { font-family: "${f.family}"; src: url("${f.url}") format("truetype"); font-display: block; }`
+  ).join('\n');
+  document.head.appendChild(style);
+
+  // Ждём фактической загрузки всех семейств
+  await Promise.all(fonts.map(f => document.fonts.load(`16px "${f.family}"`)));
+  await document.fonts.ready;
+
+  return fonts;
+}
+```
+
+При серверном рендере (`task8.md`) Puppeteer тоже дожидается `document.fonts.ready`
+перед установкой `window.mapReady = true`.
+
+---
+
 ## Обновление позиций при движении карты
 
 ```typescript
 // Вызывается при каждом событии move/zoom карты
-function обновитьПозицииЭлементов(): void {
-  для каждого элемента в состоянииРедактора.элементы:
-    const { x, y } = карта.project([элемент.координаты.lng, элемент.координаты.lat]);
-    элемент.пиксиКонтейнер.position.set(x, y);
+function updateElementPositions(): void {
+  for (const element of editorState.elements.values()) {
+    const { x, y } = map.project([element.coordinates.lng, element.coordinates.lat]);
+    element.pixiContainer.position.set(x, y);
+  }
 }
 ```
 
@@ -233,21 +285,21 @@ function обновитьПозицииЭлементов(): void {
 PixiJS контейнер элемента с новыми настройками:
 
 ```typescript
-function обновитьНастройкиЭлемента(id: string, новыеНастройки: Partial<НастройкиТочки>): void {
-  const элемент = состояниеРедактора.элементы.get(id);
-  if (!элемент) return;
+function updatePointSettings(id: string, newSettings: Partial<PointSettings>): void {
+  const element = editorState.elements.get(id);
+  if (!element) return;
 
   // Обновляем настройки
-  элемент.настройки = { ...элемент.настройки, ...новыеНастройки };
+  element.settings = { ...element.settings, ...newSettings };
 
   // Уничтожаем старый контейнер
-  элемент.пиксиКонтейнер.destroy({ children: true });
+  element.pixiContainer.destroy({ children: true });
 
   // Создаём новый с обновлёнными настройками
-  элемент.пиксиКонтейнер = создатьКонтейнерТочки(элемент.настройки);
-  const { x, y } = координатыВПиксели(элемент.координаты.lng, элемент.координаты.lat);
-  элемент.пиксиКонтейнер.position.set(x, y);
-  пиксиСлой.addChild(элемент.пиксиКонтейнер);
+  element.pixiContainer = createPointContainer(element.settings);
+  const { x, y } = coordinatesToPixels(element.coordinates.lng, element.coordinates.lat);
+  element.pixiContainer.position.set(x, y);
+  pixiLayer.addChild(element.pixiContainer);
 }
 ```
 

@@ -1,2 +1,26 @@
-assets/
-osm-data/
+# Секреты и окружение
+.env
+.env.*
+!.env.example
+
+# Зависимости и сборка
+node_modules/
+dist/
+build/
+coverage/
+
+# Логи и временные файлы
+*.log
+logs/
+.DS_Store
+.tmp/
+/tmp/
+
+# Данные проекта (большие файлы, не в git)
+osm-data/*
+!osm-data/.gitkeep
+data/videos/
+
+# Cursor: только локальное состояние, правила/скиллы коммитим
+.cursor/state/
+.cursor/logs/

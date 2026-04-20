@@ -5,7 +5,7 @@
 **Зависит от:**
 - task4.md — PixiJS слой, координаты↔пиксели, overlay событий
 - task5.md — точки на карте (маршруты соединяют точки созданные там)
-- task2.md — GET /api/route использует OSRM через бэкенд
+- task2.md — авторизация middleware для защищённых API
 **Следующая фаза:** task7.md (настройки видео не зависят от маршрутов напрямую)
 
 ---
@@ -22,6 +22,14 @@
 | **mastering-typescript** | При написании TypeScript/React кода |
 | **frontend-design** | При создании UI меню настроек маршрутов |
 | **systematic-debugging** | При отладке OSRM интеграции и MotionPath анимаций |
+| **api-contract-checker** | При изменении `GET /api/route` запроса/ответа и fallback-семантики |
+| **spec-driven-workflow** | Для удержания фазы в рамках `task6.md` и пошаговой проверки |
+
+### Когда skill указывать явно
+
+- Явно указывать **api-contract-checker**, если меняются координатные DTO/status codes.
+- Явно указывать **systematic-debugging**, если есть расхождения route preview vs route render.
+- Явно указывать **frontend-design**, когда UX построения маршрута неоднозначен.
 
 ---
 
@@ -50,37 +58,45 @@
 ## Бэкенд: GET /api/route
 
 ```typescript
-// GET /api/route?начало=37.618,55.751&конец=30.315,59.939
+// GET /api/route?start=37.618,55.751&end=30.315,59.939
 // Проксирует запрос к OSRM
 
-router.get('/route', проверитьТокен, async (req, res) => {
-  const { начало, конец } = req.query as { начало: string, конец: string };
+router.get('/route', requireAuth, async (req, res) => {
+  const { start, end } = req.query as { start: string, end: string };
 
   try {
-    const url = `http://osrm:5000/route/v1/driving/${начало};${конец}?overview=full&geometries=geojson`;
-    const ответ = await fetch(url);
-    const данные = await ответ.json();
+    const url = `http://osrm:5000/route/v1/driving/${start};${end}?overview=full&geometries=geojson`;
+    const response = await fetch(url);
+    const data = await response.json();
 
-    if (данные.code !== 'Ok' || !данные.routes[0]) {
-      return res.status(404).json({ ошибка: 'Маршрут не найден' });
+    if (data.code !== 'Ok' || !data.routes[0]) {
+      return res.status(404).json({ error: 'Маршрут не найден' });
     }
 
-    const координаты = данные.routes[0].geometry.coordinates.map(
+    const coordinates = data.routes[0].geometry.coordinates.map(
       ([lng, lat]: [number, number]) => ({ lng, lat })
     );
 
     res.json({
-      координаты,
-      расстояние: данные.routes[0].distance,
-      время: данные.routes[0].duration,
+      coordinates,
+      distance: data.routes[0].distance,
+      duration: data.routes[0].duration,
+      fallback: false,
     });
-  } catch {
-    // Fallback — прямая линия если OSRM недоступен
-    const [нач, кон] = [начало, конец].map(п => {
-      const [lng, lat] = п.split(',').map(Number);
+  } catch (err) {
+    // OSRM недоступен — честно говорим фронту, что это прямая линия (fallback),
+    // чтобы он показал toast "Маршрут по дороге временно недоступен".
+    logger.warn({ err }, 'OSRM недоступен, возвращаем прямую линию');
+    const [fromPoint, toPoint] = [start, end].map(point => {
+      const [lng, lat] = point.split(',').map(Number);
       return { lng, lat };
     });
-    res.json({ координаты: [нач, кон], расстояние: 0, время: 0 });
+    res.status(200).json({
+      coordinates: [fromPoint, toPoint],
+      distance: 0,
+      duration: 0,
+      fallback: true,
+    });
   }
 });
 ```
@@ -96,40 +112,40 @@ router.get('/route', проверитьТокен, async (req, res) => {
 // Второй клик — создаём маршрут
 // Escape — отменяем
 
-function активироватьРежимМаршрута(): void {
-  режимПостроения = true;
-  начальнаяТочка = null;
+function activateRouteMode(): void {
+  routeBuildMode = true;
+  startPoint = null;
   // Показываем подсказку "Нажмите на начальную точку"
 }
 
-function обработатьКликВРежимеМаршрута(x: number, y: number): void {
-  const точкаПодКурсором = найтиТочкуПодКурсором(x, y);
+function handleRouteModeClick(x: number, y: number): void {
+  const pointUnderCursor = findPointUnderCursor(x, y);
 
-  if (!начальнаяТочка) {
+  if (!startPoint) {
     // Первый клик — только на отмеченную точку
-    if (точкаПодКурсором) {
-      начальнаяТочка = точкаПодКурсором;
+    if (pointUnderCursor) {
+      startPoint = pointUnderCursor;
     }
     return;
   }
 
   // Второй клик
-  if (точкаПодКурсором && точкаПодКурсором.id !== начальнаяТочка.id) {
+  if (pointUnderCursor && pointUnderCursor.id !== startPoint.id) {
     // Маршрут между двумя отмеченными точками
-    создатьМаршрут(начальнаяТочка, точкаПодКурсором, 'точка');
+    createRoute(startPoint, pointUnderCursor, 'point');
   } else {
     // Маршрут в произвольное место — конец со стрелкой
-    const координаты = пикселиВКоординаты(x, y);
-    создатьМаршрут(начальнаяТочка, координаты, 'координаты');
+    const coordinates = pixelsToCoordinates(x, y);
+    createRoute(startPoint, coordinates, 'coordinates');
   }
 
-  деактивироватьРежимМаршрута();
+  deactivateRouteMode();
 }
 
 // Escape отменяет
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && режимПостроения) {
-    деактивироватьРежимМаршрута();
+  if (e.key === 'Escape' && routeBuildMode) {
+    deactivateRouteMode();
   }
 });
 ```
@@ -139,21 +155,21 @@ document.addEventListener('keydown', (e) => {
 ## Хранение маршрута
 
 ```typescript
-interface Маршрут {
+interface Route {
   id: string;
-  начало: {
-    тип: 'точка' | 'координаты';
-    идТочки?: string;        // если тип = 'точка'
-    координаты?: Координаты; // если тип = 'координаты'
+  start: {
+    type: 'point' | 'coordinates';
+    pointId?: string;
+    coordinates?: Coordinates;
   };
-  конец: {
-    тип: 'точка' | 'координаты';
-    идТочки?: string;
-    координаты?: Координаты;
+  end: {
+    type: 'point' | 'coordinates';
+    pointId?: string;
+    coordinates?: Coordinates;
   };
-  осрмКоординаты: Координаты[] | null; // реальный маршрут от OSRM
-  настройки: НастройкиМаршрута;
-  пиксиКонтейнер: PIXI.Container;
+  osrmCoordinates: Coordinates[] | null;
+  settings: RouteSettings;
+  pixiContainer: PIXI.Container;
 }
 ```
 
@@ -164,32 +180,32 @@ interface Маршрут {
 ### Прямая (пульсирующая)
 
 ```typescript
-function нарисоватьПрямуюЛинию(
-  точки: { x: number, y: number }[],
-  настройки: НастройкиМаршрута
+function drawSolidRouteLine(
+  points: { x: number, y: number }[],
+  settings: RouteSettings
 ): PIXI.Container {
-  const контейнер = new PIXI.Container();
+  const container = new PIXI.Container();
 
-  const линия = new PIXI.Graphics();
-  линия.lineStyle(настройки.толщина, настройки.цвет, настройки.прозрачность / 100);
-  if (настройки.окантовка.включена) {
-    линия.lineStyle(настройки.толщина + настройки.окантовка.размер * 2,
-                    настройки.окантовка.цвет, настройки.окантовка.прозрачность / 100);
-    нарисоватьПолилинию(линия, точки);
+  const line = new PIXI.Graphics();
+  line.lineStyle(settings.thickness, settings.color, settings.opacity / 100);
+  if (settings.stroke.enabled) {
+    line.lineStyle(settings.thickness + settings.stroke.size * 2,
+      settings.stroke.color, settings.stroke.opacity / 100);
+    drawPolyline(line, points);
   }
-  линия.lineStyle(настройки.толщина, настройки.цвет, настройки.прозрачность / 100);
-  нарисоватьПолилинию(линия, точки);
+  line.lineStyle(settings.thickness, settings.color, settings.opacity / 100);
+  drawPolyline(line, points);
 
   // Пульсирующий слой поверх
-  const пульс = new PIXI.Graphics();
-  пульс.lineStyle(настройки.толщина * 1.5, настройки.цвет, 0.3);
-  нарисоватьПолилинию(пульс, точки);
+  const pulse = new PIXI.Graphics();
+  pulse.lineStyle(settings.thickness * 1.5, settings.color, 0.3);
+  drawPolyline(pulse, points);
 
-  контейнер.addChild(линия);
-  контейнер.addChild(пульс);
-  gsap.to(пульс, { alpha: 0, duration: 1, repeat: -1, yoyo: true, ease: 'sine.inOut' });
+  container.addChild(line);
+  container.addChild(pulse);
+  gsap.to(pulse, { alpha: 0, duration: 1, repeat: -1, yoyo: true, ease: 'sine.inOut' });
 
-  return контейнер;
+  return container;
 }
 ```
 
@@ -197,15 +213,15 @@ function нарисоватьПрямуюЛинию(
 
 ```typescript
 // Пунктир перерисовывается каждый кадр со смещением offset
-let смещениеПунктира = 0;
+let dashOffset = 0;
 
-пиксиПриложение.ticker.add(() => {
-  for (const маршрут of маршруты.values()) {
-    if (маршрут.настройки.вид === 'пунктирная') {
-      маршрут.пиксиКонтейнер.removeChildren();
-      смещениеПунктира = (смещениеПунктира + 1) % 20;
-      нарисоватьПунктир(маршрут.пиксиКонтейнер, маршрут.точкиВПикселях,
-                        маршрут.настройки, смещениеПунктира);
+pixiApp.ticker.add(() => {
+  for (const route of routes.values()) {
+    if (route.settings.lineType === 'dashed') {
+      route.pixiContainer.removeChildren();
+      dashOffset = (dashOffset + 1) % 20;
+      drawDashedLine(route.pixiContainer, route.pointsInPixels,
+        route.settings, dashOffset);
     }
   }
 });
@@ -215,29 +231,29 @@ let смещениеПунктира = 0;
 
 ```typescript
 // Цвет/прозрачность передаём параметрами — в PIXI.Graphics v7 нет линия.line.color
-function добавитьСтрелку(
-  линия: PIXI.Graphics,
-  предпоследняяТочка: { x: number, y: number },
-  последняяТочка: { x: number, y: number },
-  толщина: number,
-  цвет: number,
-  прозрачность: number
+function addArrowHead(
+  line: PIXI.Graphics,
+  penultimatePoint: { x: number, y: number },
+  lastPoint: { x: number, y: number },
+  thickness: number,
+  color: number,
+  opacity: number
 ): void {
-  const угол = Math.atan2(
-    последняяТочка.y - предпоследняяТочка.y,
-    последняяТочка.x - предпоследняяТочка.x
+  const angle = Math.atan2(
+    lastPoint.y - penultimatePoint.y,
+    lastPoint.x - penultimatePoint.x
   );
-  const размерСтрелки = толщина * 4;
+  const arrowSize = thickness * 4;
 
-  линия.beginFill(цвет, прозрачность);
-  линия.drawPolygon([
-    последняяТочка.x, последняяТочка.y,
-    последняяТочка.x - размерСтрелки * Math.cos(угол - 0.4),
-    последняяТочка.y - размерСтрелки * Math.sin(угол - 0.4),
-    последняяТочка.x - размерСтрелки * Math.cos(угол + 0.4),
-    последняяТочка.y - размерСтрелки * Math.sin(угол + 0.4),
+  line.beginFill(color, opacity);
+  line.drawPolygon([
+    lastPoint.x, lastPoint.y,
+    lastPoint.x - arrowSize * Math.cos(angle - 0.4),
+    lastPoint.y - arrowSize * Math.sin(angle - 0.4),
+    lastPoint.x - arrowSize * Math.cos(angle + 0.4),
+    lastPoint.y - arrowSize * Math.sin(angle + 0.4),
   ]);
-  линия.endFill();
+  line.endFill();
 }
 ```
 
@@ -282,27 +298,33 @@ function sampleAlongPolyline(
   return { x: last.x, y: last.y, angle: Math.atan2(last.y - prev.y, last.x - prev.x) };
 }
 
-// Иконки ориентированы носом вправо (угол 0), поэтому rotation = angle напрямую
+// Иконки ориентированы носом вправо (угол 0), поэтому rotation = angle напрямую.
+// Передаём экземпляр PIXI.Application явно — статического getApplication() в PixiJS нет.
 function createTransportIcon(
+  app: PIXI.Application,
   settings: RouteSettings,
   pathPoints: { x: number, y: number }[],
-  videoDuration: number
+  videoDuration: number,
+  options?: { deterministicClock?: () => number; registerCleanup?: (fn: () => void) => void }
 ): PIXI.Sprite {
   const icon = PIXI.Sprite.from(`/assets/icons/${settings.icon}.png`); // car | plane | helicopter | ship
   icon.anchor.set(0.5);
 
-  // Привязываемся к тикеру PIXI. В превью — loop, в рендере seek через window.masterTimeline (см. task8)
-  const startTs = performance.now();
-  const app = PIXI.getApplication();
-  const ticker = (dt: number) => {
-    const elapsed = (performance.now() - startTs) / 1000;
-    const t = (elapsed / videoDuration) % 1;   // loop в превью
+  // В превью по умолчанию используем real-time clock.
+  // Для /render-page передаём deterministicClock(), привязанный к времени masterTimeline,
+  // чтобы не было рассинхрона между seek(t) и position/rotation иконки.
+  const now = options?.deterministicClock ?? (() => performance.now());
+  const startTs = now();
+  const ticker = () => {
+    const elapsed = (now() - startTs) / 1000;
+    const t = (elapsed / videoDuration) % 1;
     const { x, y, angle } = sampleAlongPolyline(pathPoints, t);
     icon.position.set(x, y);
     icon.rotation = angle;
   };
   app.ticker.add(ticker);
-  (icon as any).__ticker = ticker;   // чтобы удалить при cleanup
+  options?.registerCleanup?.(() => app.ticker.remove(ticker));
+  (icon as any).__ticker = ticker;   // fallback cleanup
 
   return icon;
 }
@@ -315,27 +337,52 @@ function createTransportIcon(
 ## Маршрут дугой
 
 ```typescript
-function вычислитьТочкиДуги(
-  начало: Координаты,
-  конец: Координаты,
-  количествоТочек = 50
-): Координаты[] {
-  const точки: Координаты[] = [];
-  const расстояние = Math.sqrt(
-    Math.pow(конец.lng - начало.lng, 2) + Math.pow(конец.lat - начало.lat, 2)
+function calculateArcPoints(
+  start: Coordinates,
+  end: Coordinates,
+  pointCount = 50
+): Coordinates[] {
+  const points: Coordinates[] = [];
+  const distance = Math.sqrt(
+    Math.pow(end.lng - start.lng, 2) + Math.pow(end.lat - start.lat, 2)
   );
-  const высотаДуги = расстояние * 0.2; // 20% от расстояния
+  const arcHeight = distance * 0.2; // 20% of distance
 
-  for (let i = 0; i <= количествоТочек; i++) {
-    const t = i / количествоТочек;
-    точки.push({
-      lng: начало.lng + (конец.lng - начало.lng) * t,
+  for (let i = 0; i <= pointCount; i++) {
+    const t = i / pointCount;
+    points.push({
+      lng: start.lng + (end.lng - start.lng) * t,
       // Параболическая дуга: sin(π*t) даёт максимум в середине
-      lat: начало.lat + (конец.lat - начало.lat) * t + Math.sin(Math.PI * t) * высотаДуги,
+      lat: start.lat + (end.lat - start.lat) * t + Math.sin(Math.PI * t) * arcHeight,
     });
   }
 
-  return точки;
+  return points;
+}
+```
+
+---
+
+## Обработка fallback OSRM на фронте
+
+Если `GET /api/route` вернул `fallback: true` — это значит, что OSRM недоступен
+и бэк отдал прямую линию между двумя точками. Фронт показывает toast
+"Маршрут по дороге временно недоступен. Построена прямая линия." (см. task9)
+и рисует маршрут как прямой.
+
+---
+
+## Координаты -> пиксели для отрисовки маршрута
+
+Маршрут в API приходит в географических координатах (`lng/lat`), а Pixi рисует в пикселях.
+Нужен явный мост-конвертация перед `drawPolyline`.
+
+```typescript
+function routeCoordinatesToPixels(coords: Coordinates[]): { x: number; y: number }[] {
+  return coords.map((c) => {
+    const p = map.project([c.lng, c.lat]);
+    return { x: p.x, y: p.y };
+  });
 }
 ```
 
@@ -345,19 +392,19 @@ function вычислитьТочкиДуги(
 
 ```typescript
 // Вызывается из task5.md при переносе точки
-function перестроитьМаршрутыТочки(идТочки: string): void {
-  for (const маршрут of маршруты.values()) {
-    const касаетсяТочки =
-      маршрут.начало.идТочки === идТочки ||
-      маршрут.конец.идТочки === идТочки;
+function rebuildRoutesForPoint(pointId: string): void {
+  for (const route of routes.values()) {
+    const touchesPoint =
+      route.start.pointId === pointId ||
+      route.end.pointId === pointId;
 
-    if (касаетсяТочки) {
+    if (touchesPoint) {
       // Если маршрут по дороге — перезапросить OSRM
-      if (маршрут.настройки.маршрутПоДороге) {
-        запроситьОСРМИОбновить(маршрут);
+      if (route.settings.useRoadRoute) {
+        requestOSRMAndRefresh(route);
       } else {
         // Просто обновить точки пути
-        обновитьТочкиПути(маршрут);
+        refreshRoutePath(route);
       }
     }
   }

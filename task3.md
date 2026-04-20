@@ -19,6 +19,14 @@
 |-------|--------------------|
 | **mastering-typescript** | При написании TypeScript/React кода |
 | **frontend-design** | При создании UI компонентов — страница логина, шапка, меню, панели |
+| **api-contract-checker** | При подключении frontend к auth/admin API и выравнивании DTO |
+| **spec-driven-workflow** | Для контроля последовательности задач и обновления заметок фазы |
+
+### Когда skill указывать явно
+
+- Явно указывать **api-contract-checker**, если UI зависит от изменений контрактов backend.
+- Явно указывать **frontend-design**, когда есть спор по UX/визуальному решению.
+- Явно указывать **spec-driven-workflow**, если фаза разбита на несколько сессий.
 
 ---
 
@@ -29,7 +37,7 @@
 - [ ] Настроить HTTP клиент (axios или fetch wrapper)
 - [ ] Страница логина (/login)
 - [ ] Хук useAuth (текущий пользователь, логин, логаут)
-- [ ] Защищённые роуты (редирект на /login если нет токена)
+- [ ] Защищённые роуты (редирект на /login если сессия невалидна — 401 от /api/auth/me)
 - [ ] Скелет главной страницы редактора (/)
 - [ ] Шапка с кнопкой пользователя
 - [ ] Выпадающее меню пользователя
@@ -43,19 +51,22 @@
 ## Роутинг
 
 ```typescript
-// src/маршруты.tsx
+// src/routes.tsx
 <Routes>
-  <Route path="/login" element={<СтраницаЛогина />} />
-  <Route element={<ЗащищённыйМаршрут />}>
-    <Route path="/" element={<СтраницаРедактора />} />
-    <Route path="/admin" element={<АдминМаршрут><СтраницаАдмина /></АдминМаршрут>} />
+  <Route path="/login" element={<LoginPage />} />
+  <Route element={<ProtectedRoute />}>
+    <Route path="/" element={<EditorPage />} />
+    <Route element={<AdminRoute />}>
+      <Route path="/admin" element={<AdminPage />} />
+    </Route>
   </Route>
 </Routes>
 ```
 
 ```typescript
-// ЗащищённыйМаршрут — проверяет токен, редиректит на /login
-// АдминМаршрут — проверяет роль admin, редиректит на / если не admin
+// ProtectedRoute проверяет сессию (GET /api/auth/me) и редиректит на /login при 401.
+// AdminRoute проверяет role === 'admin' и редиректит на / для обычных пользователей.
+// Оба — outlet-компоненты: рендерят <Outlet /> если проверка пройдена.
 ```
 
 ---
@@ -73,11 +84,12 @@ interface AuthContext {
 }
 
 // При старте приложения:
-// 1. GET /api/auth/csrf — получить csrf_token (ставится в cookie и возвращается)
+// 1. GET /api/auth/csrf — гарантировать csrf_token cookie (источник токена — cookie)
 // 2. GET /api/auth/me — если 200, пользователь залогинен (session cookie валиден)
 // 3. Если 401 — редирект на /login
 // 4. axios настроен с withCredentials: true и интерцептором X-CSRF-Token
 //    (читает csrf_token cookie и добавляет в заголовок на POST/PUT/DELETE/PATCH)
+// 5. POST /api/auth/login CSRF-токена не требует (до логина его ещё нет)
 ```
 
 ```typescript
@@ -113,21 +125,21 @@ http.interceptors.request.use((config) => {
 ## Скелет главной страницы
 
 ```typescript
-// СтраницаРедактора.tsx
+// EditorPage.tsx
 // Пока без карты — только layout с правильными пропорциями
 
-export function СтраницаРедактора() {
+export function EditorPage() {
   return (
-    <div className="редактор-контейнер">
-      <Шапка />
-      <div className="редактор-тело">
-        <СписокЭлементов />           {/* левая панель */}
-        <div className="превью-карты"> {/* здесь будет карта в task4 */}
-          <КнопкаСбросаПоложения />
+    <div className="editor-container">
+      <Header />
+      <div className="editor-body">
+        <ElementsList />           {/* left panel */}
+        <div className="map-preview"> {/* map will be added in task4 */}
+          <ResetViewButton />
         </div>
-        <ПравоеМеню />                {/* правая панель настроек */}
+        <RightSidebar />                {/* right settings panel */}
       </div>
-      <НижняяПанель />
+      <BottomToolbar />
     </div>
   );
 }
@@ -142,20 +154,20 @@ export function СтраницаРедактора() {
 // Клик вне меню — закрывается
 // Анимация: плавное появление сверху вниз
 
-function МенюПользователя() {
+function UserMenu() {
   return (
-    <ВыпадающееМеню>
-      <ПунктМеню onClick={открытьТехПоддержку}>
+    <DropdownMenu>
+      <MenuItem onClick={openSupportModal}>
         Тех. поддержка
-      </ПунктМеню>
-      <ПунктМеню onClick={открытьИсторию}>
+      </MenuItem>
+      <MenuItem onClick={openHistoryPanel}>
         Моя история
-      </ПунктМеню>
-      <РазделительМеню />
-      <ПунктМеню onClick={выйти} опасный>
+      </MenuItem>
+      <MenuDivider />
+      <MenuItem onClick={logout} danger>
         Выйти
-      </ПунктМеню>
-    </ВыпадающееМеню>
+      </MenuItem>
+    </DropdownMenu>
   );
 }
 ```
@@ -166,12 +178,12 @@ function МенюПользователя() {
 
 - Открывается как drawer справа (слайд из-за края)
 - Ширина 480px, высота 100vh
-- Получает данные: GET /api/videos
+- Получает данные: GET /api/history
 - Каждая запись: миниатюра + название + дата + кнопка скачать
 - Если пусто: "Вы ещё не создавали видео"
 - Кнопка закрытия ×
 
-Связь с task8.md: эндпоинт GET /api/videos реализуется в фазе 8,
+Связь с task8.md: эндпоинт GET /api/history реализуется в фазе 8,
 пока можно заглушку с пустым массивом.
 
 ---
@@ -179,7 +191,7 @@ function МенюПользователя() {
 ## Страница /admin
 
 ```typescript
-function СтраницаАдмина() {
+function AdminPage() {
   // GET /api/admin/users — список пользователей
   // POST /api/admin/users — форма добавления
   // DELETE /api/admin/users/:id — с подтверждением
@@ -187,8 +199,8 @@ function СтраницаАдмина() {
   return (
     <div>
       <h1>Управление пользователями</h1>
-      <ФормаДобавленияПользователя />
-      <ТаблицаПользователей />
+      <CreateUserForm />
+      <UsersTable />
     </div>
   );
 }
@@ -201,23 +213,23 @@ function СтраницаАдмина() {
 Подключить в `src/index.css`:
 ```css
 :root {
-  --цвет-фон-страница:    #0d0d0d;
-  --цвет-фон-панель:      #1a1a1a;
-  --цвет-фон-панель-2:    #222222;
-  --цвет-фон-инпут:       #2a2a2a;
-  --цвет-фон-ховер:       #333333;
-  --цвет-текст-основной:  #f0f0f0;
-  --цвет-текст-вторичный: #888888;
-  --цвет-акцент:          #3d8bff;
-  --цвет-акцент-ховер:    #5a9fff;
-  --цвет-опасность:       #ff4444;
-  --цвет-успех:           #44bb44;
-  --цвет-граница:         #333333;
-  --цвет-граница-светлый: #444444;
+  --color-bg-page:         #0d0d0d;
+  --color-bg-panel:        #1a1a1a;
+  --color-bg-panel-2:      #222222;
+  --color-bg-input:        #2a2a2a;
+  --color-bg-hover:        #333333;
+  --color-text-primary:    #f0f0f0;
+  --color-text-secondary:  #888888;
+  --color-accent:          #3d8bff;
+  --color-accent-hover:    #5a9fff;
+  --color-danger:          #ff4444;
+  --color-success:         #44bb44;
+  --color-border:          #333333;
+  --color-border-light:    #444444;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--цвет-фон-страница); color: var(--цвет-текст-основной); }
+body { background: var(--color-bg-page); color: var(--color-text-primary); }
 ```
 
 ---

@@ -1,0 +1,13 @@
+---
+description: Infrastructure runtime constraints for mapvideo
+alwaysApply: true
+---
+
+# Infrastructure Runtime Rules
+
+- For mapvideo, run core services in Docker Compose: backend, frontend, postgres/postgis, martin, osrm.
+- Do not use system PostgreSQL for development; use Docker PostgreSQL.
+- Keep public ingress on host nginx only.
+- Do not bind app containers to `0.0.0.0:80` or `0.0.0.0:443`.
+- Prefer host binds like `127.0.0.1:3000/3001/3002/5000/5432`.
+- Photon is external via backend proxy by default; do not add Photon container unless explicitly requested.

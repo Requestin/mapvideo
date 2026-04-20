@@ -1,0 +1,13 @@
+---
+description: Spec-driven workflow for phase and task execution
+alwaysApply: true
+---
+
+# Spec and Task Workflow
+
+- Work strictly phase-by-phase: `task1.md` -> `task2.md` -> ... -> `task9.md`.
+- Do not jump to the next task file before finishing the current one.
+- Keep `SPEC.md` progress fields aligned with real task state.
+- Update "next session note" sections when pausing or finishing a step.
+- Prefer small, verifiable changes and mark checklist items immediately.
+- Keep requirements in markdown authoritative; avoid hidden assumptions in chat-only context.

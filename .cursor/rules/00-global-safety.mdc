@@ -1,0 +1,14 @@
+---
+description: Global safety and project-critical constraints
+alwaysApply: true
+---
+
+# Global Safety
+
+- Follow `prompt.md`, `cursor.md`, `SPEC.md`, and `task1.md` ... `task9.md` as source of truth.
+- Never touch unrelated services or configs outside mapvideo scope.
+- Critical: do not modify existing `maps.gyhyry.ru` nginx configs/certs/services.
+- Critical: do not run nginx as a Docker service for this project.
+- Use host nginx only for `80/443`; app services bind to `127.0.0.1:*`.
+- Do not use destructive commands (`reset --hard`, force push, blanket deletes) unless explicitly requested.
+- If unexpected external changes appear, stop and ask user before proceeding.
