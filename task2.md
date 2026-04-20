@@ -1,7 +1,7 @@
 # Фаза 2 — Авторизация (бэкенд)
 
 **Статус:** Не начато
-**Связанные файлы:** CLAUDE.md, SPEC.md (раздел "Пользователи и авторизация")
+**Связанные файлы:** cursor.md, SPEC.md (раздел "Пользователи и авторизация")
 **Зависит от:** task1.md — PostgreSQL должен быть запущен
 **Следующая фаза:** task3.md (фронтенд использует API созданное здесь)
 
@@ -24,58 +24,82 @@ JWT сессии, защищённые маршруты, API для admin пан
 
 ## Задачи
 
-- [ ] Инициализировать backend проект (Node.js + TypeScript + Express)
-- [ ] Настроить подключение к PostgreSQL
-- [ ] Создать миграции БД (таблицы users, sessions, videos)
-- [ ] POST /api/auth/login
-- [ ] POST /api/auth/logout
-- [ ] GET /api/auth/me
-- [ ] Middleware проверки авторизации
-- [ ] Middleware проверки роли admin
+- [ ] Инициализировать backend проект (Node.js 20 + TypeScript + Express)
+- [ ] Настроить подключение к PostgreSQL (pg pool)
+- [ ] Создать миграции БД (users, sessions, render_jobs, videos)
+- [ ] Настроить cookie-parser + CSRF middleware (double-submit)
+- [ ] Настроить rate limiter (express-rate-limit) на /api/auth/login
+- [ ] Настроить structured logger (pino)
+- [ ] POST /api/auth/login (ставит httpOnly session cookie + csrf_token cookie)
+- [ ] POST /api/auth/logout (удаляет cookies + запись из sessions)
+- [ ] GET /api/auth/me (читает session cookie)
+- [ ] GET /api/auth/csrf (возвращает текущий csrf_token, для SPA после F5)
+- [ ] Middleware requireAuth (проверяет session cookie и наличие в БД)
+- [ ] Middleware requireAdmin (проверяет роль admin)
+- [ ] Middleware requireCsrf (сравнивает cookie и заголовок для POST/PUT/DELETE)
 - [ ] GET /api/admin/users
 - [ ] POST /api/admin/users
 - [ ] DELETE /api/admin/users/:id
-- [ ] GET /api/health (для проверки работоспособности)
+- [ ] GET /api/geocode/search?q=... (проксирование Photon, для task5)
+- [ ] GET /api/health (публичный)
 - [ ] Создать дефолтного пользователя admin при первом запуске
+- [ ] Graceful shutdown: дождаться завершения активных рендеров на SIGTERM
 - [ ] Написать тесты (Jest)
 
 ---
 
 ## Схема базы данных
 
+Имена таблиц/колонок — английский (ORM, миграции, SQL без кавычек). Комментарии — русский.
+
 ```sql
 -- Пользователи
-CREATE TABLE пользователи (
+CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  логин VARCHAR(50) UNIQUE NOT NULL,
-  хэш_пароля VARCHAR(255) NOT NULL,
-  роль VARCHAR(10) NOT NULL DEFAULT 'user' CHECK (роль IN ('admin', 'user')),
-  создан TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  username VARCHAR(50) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(10) NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Сессии (для хранения JWT и инвалидации)
-CREATE TABLE сессии (
+-- Сессии (хранится ТОЛЬКО хэш токена — если БД утечёт, сессии нельзя угнать)
+CREATE TABLE sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  id_пользователя UUID NOT NULL REFERENCES пользователи(id) ON DELETE CASCADE,
-  токен VARCHAR(500) NOT NULL UNIQUE,
-  истекает TIMESTAMP WITH TIME ZONE NOT NULL,
-  устройство TEXT,
-  создана TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(64) NOT NULL UNIQUE,   -- sha256 от токена в cookie
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- История видео
-CREATE TABLE видео (
+-- Задачи рендера (переживают рестарт бэкенда, нужно для восстановления прогресса)
+CREATE TABLE render_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  id_пользователя UUID NOT NULL REFERENCES пользователи(id) ON DELETE CASCADE,
-  имя_файла VARCHAR(255) NOT NULL,
-  путь_миниатюры VARCHAR(255),
-  создано TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status VARCHAR(16) NOT NULL DEFAULT 'queued'
+    CHECK (status IN ('queued', 'running', 'done', 'error', 'cancelled')),
+  progress SMALLINT NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  state_json JSONB NOT NULL,
+  output_path VARCHAR(255),
+  thumbnail_path VARCHAR(255),
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX ON сессии(токен);
-CREATE INDEX ON сессии(id_пользователя);
-CREATE INDEX ON видео(id_пользователя);
-CREATE INDEX ON видео(создано);
+-- История видео (готовые файлы)
+CREATE TABLE videos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id UUID REFERENCES render_jobs(id) ON DELETE SET NULL,
+  filename VARCHAR(255) NOT NULL,
+  thumbnail_path VARCHAR(255),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ON sessions(token_hash);
+CREATE INDEX ON sessions(user_id);
+CREATE INDEX ON render_jobs(user_id, status);
+CREATE INDEX ON videos(user_id, created_at DESC);
 ```
 
 ---
@@ -85,52 +109,58 @@ CREATE INDEX ON видео(создано);
 ### POST /api/auth/login
 ```typescript
 // Запрос
-{ логин: string, пароль: string }
+{ username: string, password: string }
 
-// Ответ 200
+// Ответ 200 — ставит два cookie и возвращает пользователя
+// Set-Cookie: session=<opaque_token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000
+// Set-Cookie: csrf_token=<random>; Secure; SameSite=Lax; Path=/; Max-Age=2592000
 {
-  токен: string,          // JWT, срок 30 дней
-  пользователь: {
-    id: string,
-    логин: string,
-    роль: 'admin' | 'user'
-  }
+  user: { id: string, username: string, role: 'admin' | 'user' }
 }
 // Ответ 401: { ошибка: "Неверный логин или пароль" }
+// Ответ 429: { ошибка: "Слишком много попыток, попробуйте через N минут" }
 ```
 
 ### POST /api/auth/logout
 ```typescript
-// Заголовок: Authorization: Bearer <token>
-// Ответ 200: { успех: true }
-// Инвалидирует токен в таблице сессий
+// Использует session cookie (отправляется автоматически)
+// Требует X-CSRF-Token заголовок совпадающий с csrf_token cookie
+// Ответ 200: { success: true }
+// Удаляет запись из sessions и очищает cookies
 ```
 
 ### GET /api/auth/me
 ```typescript
-// Заголовок: Authorization: Bearer <token>
-// Ответ 200: { id, логин, роль }
+// Читает session cookie
+// Ответ 200: { id, username, role }
 // Ответ 401: { ошибка: "Не авторизован" }
+```
+
+### GET /api/auth/csrf
+```typescript
+// Публичный. Возвращает текущий csrf_token cookie (или ставит новый если нет).
+// SPA зовёт при старте чтобы получить токен для заголовка X-CSRF-Token.
+// Ответ 200: { csrfToken: string }
 ```
 
 ### GET /api/admin/users
 ```typescript
 // Только роль admin
-// Ответ 200: { пользователи: [{ id, логин, роль, создан }] }
+// Ответ 200: { users: [{ id, username, role, createdAt }] }
 ```
 
 ### POST /api/admin/users
 ```typescript
-// Только роль admin
-// Запрос: { логин: string, пароль: string }
-// Ответ 201: { id, логин, роль }
+// Только роль admin, требует X-CSRF-Token
+// Запрос: { username: string, password: string }
+// Ответ 201: { id, username, role }
 // Ответ 409: { ошибка: "Пользователь с таким логином уже существует" }
 ```
 
 ### DELETE /api/admin/users/:id
 ```typescript
-// Только роль admin
-// Ответ 200: { успех: true }
+// Только роль admin, требует X-CSRF-Token
+// Ответ 200: { success: true }
 // Ответ 403: { ошибка: "Нельзя удалить пользователя admin" }
 // Ответ 404: { ошибка: "Пользователь не найден" }
 ```
@@ -138,31 +168,83 @@ CREATE INDEX ON видео(создано);
 ### GET /api/health
 ```typescript
 // Публичный эндпоинт
-// Ответ 200: { статус: "ok", время: "ISO8601" }
+// Ответ 200: { status: "ok", time: "ISO8601" }
 ```
 
 ---
 
-## Реализация JWT
+## Реализация сессий (opaque token в cookie)
+
+JWT не используем. Вместо этого — opaque random token в httpOnly cookie + запись в `sessions`. В БД хранится только sha256-хэш токена.
 
 ```typescript
-// Долгоживущий токен — 30 дней
-// При логине токен сохраняется в таблице сессий
-// При logout — удаляется из таблицы сессий
-// Middleware проверяет: 1) подпись JWT, 2) наличие токена в таблице сессий
+// Создание сессии при логине
+import crypto from 'node:crypto';
 
-const СРОК_ТОКЕНА = '30d';
+async function createSession(userId: string): Promise<{ token: string, csrf: string }> {
+  const token = crypto.randomBytes(32).toString('base64url');   // 256 бит энтропии
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const csrf = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);  // 30 дней
 
-async function создатьТокен(пользователь: Пользователь): Promise<string> {
-  const токен = jwt.sign(
-    { id: пользователь.id, логин: пользователь.логин, роль: пользователь.роль },
-    process.env.JWT_SECRET!,
-    { expiresIn: СРОК_ТОКЕНА }
+  await db.query(
+    'INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+    [userId, tokenHash, expiresAt]
   );
-  // Сохранить в БД
-  await сохранитьСессию(пользователь.id, токен);
-  return токен;
+  return { token, csrf };
 }
+
+// Middleware requireAuth
+async function requireAuth(req, res, next) {
+  const token = req.cookies.session;
+  if (!token) return res.status(401).json({ ошибка: 'Не авторизован' });
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const session = await findSessionByHash(tokenHash);
+  if (!session || session.expires_at < new Date()) {
+    return res.status(401).json({ ошибка: 'Не авторизован' });
+  }
+  req.user = await findUserById(session.user_id);
+  next();
+}
+
+// Middleware requireCsrf (для POST/PUT/DELETE/PATCH)
+function requireCsrf(req, res, next) {
+  const cookie = req.cookies.csrf_token;
+  const header = req.header('X-CSRF-Token');
+  if (!cookie || !header || cookie !== header) {
+    return res.status(403).json({ ошибка: 'CSRF проверка не пройдена' });
+  }
+  next();
+}
+
+// Установка cookies при логине
+res.cookie('session', token, {
+  httpOnly: true,
+  secure: process.env.COOKIE_SECURE === 'true',
+  sameSite: 'lax',
+  maxAge: 30 * 24 * 60 * 60 * 1000,
+});
+res.cookie('csrf_token', csrf, {
+  httpOnly: false,   // читается из JS для заголовка
+  secure: process.env.COOKIE_SECURE === 'true',
+  sameSite: 'lax',
+  maxAge: 30 * 24 * 60 * 60 * 1000,
+});
+```
+
+## Rate limit на логин
+
+```typescript
+import rateLimit from 'express-rate-limit';
+
+const loginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,                    // 5 неудачных попыток
+  skipSuccessfulRequests: true,
+  message: { ошибка: 'Слишком много попыток, попробуйте через 10 минут' },
+});
+
+router.post('/auth/login', loginLimiter, /* handler */);
 ```
 
 ---
@@ -173,12 +255,12 @@ async function создатьТокен(пользователь: Пользов
 Если нет — создать с паролем из переменной окружения `ADMIN_PASSWORD`.
 
 ```typescript
-async function инициализироватьAdmin(): Promise<void> {
-  const существует = await найтиПользователя('admin');
-  if (!существует) {
-    const хэш = await bcrypt.hash(process.env.ADMIN_PASSWORD!, 12);
-    await создатьПользователя({ логин: 'admin', хэш_пароля: хэш, роль: 'admin' });
-    console.log('Создан пользователь admin');
+async function initAdmin(): Promise<void> {
+  const existing = await findUserByUsername('admin');
+  if (!existing) {
+    const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD!, 12);
+    await createUser({ username: 'admin', passwordHash: hash, role: 'admin' });
+    логгер.info('Создан пользователь admin');
   }
 }
 // Вызывать при старте сервера

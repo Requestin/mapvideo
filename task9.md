@@ -118,12 +118,16 @@
 
 ## Деплой на сервер
 
-### 1. Nginx конфиг
+### 1. Nginx конфиг (хостовой — docker-nginx нет)
+
+**КРИТИЧНО: не редактировать существующие конфиги maps.gyhyry.ru!** Создать только новый файл.
+
 ```bash
-# Создать файл (НЕ редактировать существующие конфиги maps.gyhyry.ru!)
-sudo nano /etc/nginx/sites-enabled/mapvideo.gyhyry.ru.conf
+sudo nano /etc/nginx/sites-available/mapvideo.gyhyry.ru.conf
 # Вставить конфиг из task1.md
-sudo nginx -t && sudo systemctl reload nginx
+sudo ln -s /etc/nginx/sites-available/mapvideo.gyhyry.ru.conf /etc/nginx/sites-enabled/
+sudo nginx -t            # обязательно — если падает, откатить ТОЛЬКО свой файл
+sudo systemctl reload nginx
 ```
 
 ### 2. SSL
@@ -131,33 +135,45 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d mapvideo.gyhyry.ru
 ```
 
-### 3. Клонировать репозиторий и настроить
+### 3. Код уже на сервере
+Репозиторий живёт в `~/mapvideo` с самого начала разработки (работа ведётся по SSH).
+На этапе деплоя нужно только:
 ```bash
-git clone <repo-url> ~/mapvideo
 cd ~/mapvideo
-cp .env.example .env
-# Заполнить .env — пароли, JWT_SECRET
+git pull
+cp .env.example .env      # если .env ещё не создан
+# Заполнить .env — пароли, SESSION_SECRET, COOKIE_SECURE=true, OSM_PBF_FILE
 nano .env
 ```
 
 ### 4. Импортировать данные OSM (первый раз)
 ```bash
-./scripts/импорт-osm.sh
-# 25-30 минут
+# По умолчанию Россия (~3-4 GB, 20-40 минут)
+./scripts/import-osm.sh
+# Если нужен весь мир: поменять OSM_PBF_FILE=planet-latest.osm.pbf в .env, несколько часов
 ```
 
 ### 5. Запустить
 ```bash
 docker compose up -d
-docker compose ps   # все должны быть Up
+docker compose ps   # все должны быть healthy
 ```
 
 ### 6. Финальная проверка на продакшне
+Наружу видны только 80/443. Внутренние сервисы — через `docker compose exec`.
+
 ```bash
+# Снаружи (то что видит пользователь)
 curl https://mapvideo.gyhyry.ru/api/health
 curl https://mapvideo.gyhyry.ru/tiles/catalog
-curl "http://localhost:2322/api?q=Москва&limit=1"
-curl "http://localhost:5000/route/v1/driving/37.618,55.751;30.315,59.939"
+
+# Внутренние (127.0.0.1 — только с сервера)
+curl http://127.0.0.1:3001/api/health
+curl http://127.0.0.1:3002/catalog
+curl "http://127.0.0.1:5000/route/v1/driving/37.618,55.751;30.315,59.939"
+
+# Геокодер — публичный Photon (Photon в compose нет)
+curl "https://photon.komoot.io/api?q=Москва&limit=1"
 ```
 
 ---

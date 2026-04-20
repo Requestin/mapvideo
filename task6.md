@@ -214,11 +214,14 @@ let смещениеПунктира = 0;
 ### Стрелка на конце маршрута
 
 ```typescript
+// Цвет/прозрачность передаём параметрами — в PIXI.Graphics v7 нет линия.line.color
 function добавитьСтрелку(
   линия: PIXI.Graphics,
   предпоследняяТочка: { x: number, y: number },
   последняяТочка: { x: number, y: number },
-  толщина: number
+  толщина: number,
+  цвет: number,
+  прозрачность: number
 ): void {
   const угол = Math.atan2(
     последняяТочка.y - предпоследняяТочка.y,
@@ -226,7 +229,7 @@ function добавитьСтрелку(
   );
   const размерСтрелки = толщина * 4;
 
-  линия.beginFill(линия.line.color, линия.line.alpha);
+  линия.beginFill(цвет, прозрачность);
   линия.drawPolygon([
     последняяТочка.x, последняяТочка.y,
     последняяТочка.x - размерСтрелки * Math.cos(угол - 0.4),
@@ -242,35 +245,70 @@ function добавитьСтрелку(
 
 ## Иконки транспорта
 
+GSAP MotionPath — **премиум плагин**, не используем. Вместо него — собственная функция интерполяции по полилинии с поворотом.
+
 ```typescript
-function создатьИконкуТранспорта(
-  настройки: НастройкиМаршрута,
-  точкиПути: { x: number, y: number }[],
-  длительностьВидео: number
+// Считает позицию и угол на полилинии по прогрессу t ∈ [0, 1]
+function sampleAlongPolyline(
+  path: { x: number, y: number }[],
+  t: number
+): { x: number, y: number, angle: number } {
+  // Считаем общую длину и длины сегментов
+  const segLens: number[] = [];
+  let total = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const dx = path[i+1].x - path[i].x;
+    const dy = path[i+1].y - path[i].y;
+    const len = Math.hypot(dx, dy);
+    segLens.push(len);
+    total += len;
+  }
+  const target = t * total;
+  let acc = 0;
+  for (let i = 0; i < segLens.length; i++) {
+    if (acc + segLens[i] >= target) {
+      const local = (target - acc) / segLens[i];
+      const a = path[i], b = path[i+1];
+      return {
+        x: a.x + (b.x - a.x) * local,
+        y: a.y + (b.y - a.y) * local,
+        angle: Math.atan2(b.y - a.y, b.x - a.x),
+      };
+    }
+    acc += segLens[i];
+  }
+  const last = path[path.length - 1];
+  const prev = path[path.length - 2] ?? last;
+  return { x: last.x, y: last.y, angle: Math.atan2(last.y - prev.y, last.x - prev.x) };
+}
+
+// Иконки ориентированы носом вправо (угол 0), поэтому rotation = angle напрямую
+function createTransportIcon(
+  settings: RouteSettings,
+  pathPoints: { x: number, y: number }[],
+  videoDuration: number
 ): PIXI.Sprite {
-  const иконка = PIXI.Sprite.from(`/assets/icons/${настройки.иконка}.png`);
-  иконка.anchor.set(0.5);
+  const icon = PIXI.Sprite.from(`/assets/icons/${settings.icon}.png`); // car | plane | helicopter | ship
+  icon.anchor.set(0.5);
 
-  // GSAP MotionPath — иконка движется по точкам пути
-  // В превью — зацикленно, на рендере — один проход за длительностьВидео
-  gsap.to(иконка, {
-    motionPath: {
-      path: точкиПути,
-      align: иконка,
-      alignOrigin: [0.5, 0.5],
-      autoRotate: true,  // поворот по направлению движения
-    },
-    duration: длительностьВидео,
-    ease: 'none',
-    repeat: -1,  // для превью
-  });
+  // Привязываемся к тикеру PIXI. В превью — loop, в рендере seek через window.masterTimeline (см. task8)
+  const startTs = performance.now();
+  const app = PIXI.getApplication();
+  const ticker = (dt: number) => {
+    const elapsed = (performance.now() - startTs) / 1000;
+    const t = (elapsed / videoDuration) % 1;   // loop в превью
+    const { x, y, angle } = sampleAlongPolyline(pathPoints, t);
+    icon.position.set(x, y);
+    icon.rotation = angle;
+  };
+  app.ticker.add(ticker);
+  (icon as any).__ticker = ticker;   // чтобы удалить при cleanup
 
-  return иконка;
+  return icon;
 }
 ```
 
-**Важно:** все иконки транспорта в PNG файлах ориентированы **носом вправо**.
-PixiJS автоматически поворачивает иконку через `autoRotate: true`.
+**Важно:** PNG иконки ориентированы **носом вправо** (см. `SPEC.md` раздел Ассеты). Угол 0 рад = вправо, поэтому `icon.rotation = angle` без коррекции.
 
 ---
 

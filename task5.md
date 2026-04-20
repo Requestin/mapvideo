@@ -51,11 +51,16 @@
 
 ```typescript
 // GET /api/geocode/search?q=Москва&limit=5
-// Проксирует запрос к Photon: http://photon:2322/api?q=...
+// Проксирует запрос к публичному Photon: https://photon.komoot.io/api
+// (вариант "в" из решения — без self-hosted индекса. Если упрёмся в rate limit
+// или сервис ляжет — переключаемся на self-hosted worldwide индекс 75 ГБ,
+// поднимаем komoot/photon как docker-сервис и меняем URL на http://photon:2322/api)
+
+const PHOTON_URL = process.env.PHOTON_URL || 'https://photon.komoot.io/api';
 
 router.get('/geocode/search', проверитьТокен, async (req, res) => {
   const { q, limit = 5 } = req.query;
-  const ответ = await fetch(`http://photon:2322/api?q=${q}&limit=${limit}&lang=ru`);
+  const ответ = await fetch(`${PHOTON_URL}?q=${encodeURIComponent(String(q))}&limit=${limit}&lang=ru`);
   const данные = await ответ.json();
 
   const результаты = данные.features.map((f: any) => ({
@@ -137,8 +142,8 @@ function создатьМигающуюТочку(настройки: Настр
 function создатьВзрыв(настройки: НастройкиТочки): PIXI.Container {
   const контейнер = new PIXI.Container();
 
-  // Статичная иконка (или placeholder если ассет ещё не передан)
-  const иконка = PIXI.Sprite.from('/assets/icons/взрыв.png');
+  // Статичная иконка (имена файлов — только английский, см. SPEC.md раздел "Ассеты")
+  const иконка = PIXI.Sprite.from('/assets/icons/explosion.png');
   иконка.anchor.set(0.5);
   иконка.scale.set(настройки.размер / 64);
   иконка.alpha = настройки.прозрачность / 100;
@@ -165,10 +170,9 @@ function создатьВзрыв(настройки: НастройкиТочк
 
 ```typescript
 function создатьОгонь(настройки: НастройкиТочки): PIXI.Container {
-  // Файлы: /assets/icons/огонь/ — готовая PNG секвенция
-  // Определяем количество кадров динамически или используем фиксированное число
+  // Файлы: /assets/icons/fire_loop/ — готовая PNG секвенция (имена — английский)
   const кадры = Array.from({ length: 150 }, (_, i) =>
-    PIXI.Texture.from(`/assets/icons/огонь/${String(i + 1).padStart(4, '0')}.png`)
+    PIXI.Texture.from(`/assets/icons/fire_loop/${String(i + 1).padStart(4, '0')}.png`)
   );
 
   const анимация = new PIXI.AnimatedSprite(кадры);
@@ -189,7 +193,7 @@ function создатьОгонь(настройки: НастройкиТочк
 
 ```typescript
 function создатьЗемлетрясение(настройки: НастройкиТочки): PIXI.Container {
-  const иконка = PIXI.Sprite.from('/assets/icons/землетрясение.png');
+  const иконка = PIXI.Sprite.from('/assets/icons/earthquake.png');
   иконка.anchor.set(0.5);
   иконка.scale.set(настройки.размер / 64);
   иконка.alpha = настройки.прозрачность / 100;

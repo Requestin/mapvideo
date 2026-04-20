@@ -18,8 +18,10 @@
 - Логотип и название "Mapvideo" на странице
 - После успешного логина → редирект на `/`
 - Любая страница без авторизации → редирект на `/login`
-- Сессия запоминается автоматически (долгоживущий httpOnly cookie/JWT)
-- Пароли хранятся в БД в хэшированном виде (bcrypt)
+- Сессия запоминается автоматически (httpOnly cookie `session`, срок 30 дней)
+- Защита от CSRF: double-submit cookie (`csrf_token` cookie, не httpOnly) + заголовок `X-CSRF-Token` на мутирующих запросах
+- Rate limit на `POST /api/auth/login`: 5 неудачных попыток с одного IP за 10 минут → 429
+- Пароли хранятся в БД в хэшированном виде (bcrypt, 12 раундов)
 
 ### Страница администратора (`/admin`)
 - Доступна только пользователю `admin`
@@ -197,8 +199,12 @@
 ## Хранение данных
 
 ### База данных (PostgreSQL)
-- **users** — (id, login, password_hash, role, created_at)
-- **sessions** — (id, user_id, token, expires_at)
+Имена таблиц и колонок — **только английский** (чтобы работать с ORM, миграциями и SQL без кавычек).
+Комментарии в коде и тексты ошибок — русский.
+
+- **users** — (id, username, password_hash, role, created_at)
+- **sessions** — (id, user_id, token_hash, expires_at, created_at)
+- **render_jobs** — (id, user_id, status, progress, state_json, output_path, error_message, created_at, updated_at)
 - **videos** — (id, user_id, filename, thumbnail_path, created_at)
 - **gis** — отдельная БД для PostGIS/Martin/Photon
 

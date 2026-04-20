@@ -62,18 +62,38 @@
 
 ## Хук useAuth
 
+Токен НЕ хранится в JS (httpOnly cookie). Флоу:
+
 ```typescript
-interface КонтекстАвторизации {
-  пользователь: Пользователь | null;
-  загрузка: boolean;
-  войти: (логин: string, пароль: string) => Promise<void>;
-  выйти: () => Promise<void>;
+interface AuthContext {
+  user: User | null;
+  loading: boolean;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 // При старте приложения:
-// 1. Читаем токен из localStorage
-// 2. Если есть — вызываем GET /api/auth/me для проверки
-// 3. Если токен протух — чистим localStorage и редиректим на /login
+// 1. GET /api/auth/csrf — получить csrf_token (ставится в cookie и возвращается)
+// 2. GET /api/auth/me — если 200, пользователь залогинен (session cookie валиден)
+// 3. Если 401 — редирект на /login
+// 4. axios настроен с withCredentials: true и интерцептором X-CSRF-Token
+//    (читает csrf_token cookie и добавляет в заголовок на POST/PUT/DELETE/PATCH)
+```
+
+```typescript
+// src/api/http.ts
+import axios from 'axios';
+
+export const http = axios.create({ baseURL: '/api', withCredentials: true });
+
+http.interceptors.request.use((config) => {
+  const method = (config.method || 'get').toUpperCase();
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const csrf = document.cookie.split('; ').find(c => c.startsWith('csrf_token='))?.split('=')[1];
+    if (csrf) config.headers['X-CSRF-Token'] = decodeURIComponent(csrf);
+  }
+  return config;
+});
 ```
 
 ---

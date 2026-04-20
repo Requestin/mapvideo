@@ -104,35 +104,39 @@ export function КартаРедактора() {
 ## Стиль карты из Martin
 
 ```typescript
-const СТИЛЬ_ТЁМНОЙ_КАРТЫ = {
+// ВАЖНО: source-layer должен СОВПАДАТЬ с именем таблицы в PostGIS
+// (Martin публикует слои по именам таблиц: planet_osm_polygon, planet_osm_line).
+// PixiJS pinned в 7.4.2 — не использовать v8 async init API.
+
+const DARK_MAP_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
-    полигоны: {
+    osm_polygon: {
       type: 'vector',
       tiles: ['/tiles/planet_osm_polygon/{z}/{x}/{y}'],
       minzoom: 0, maxzoom: 18,
     },
-    линии: {
+    osm_line: {
       type: 'vector',
       tiles: ['/tiles/planet_osm_line/{z}/{x}/{y}'],
       minzoom: 0, maxzoom: 18,
     },
   },
   layers: [
-    { id: 'фон', type: 'background', paint: { 'background-color': '#1a1a2e' } },
+    { id: 'bg', type: 'background', paint: { 'background-color': '#1a1a2e' } },
     {
-      id: 'вода',
+      id: 'water',
       type: 'fill',
-      source: 'полигоны',
-      'source-layer': 'polygons',
+      source: 'osm_polygon',
+      'source-layer': 'planet_osm_polygon',
       filter: ['any', ['==', ['get', 'natural'], 'water'], ['has', 'water']],
       paint: { 'fill-color': '#16213e' },
     },
     {
-      id: 'дороги-главные',
+      id: 'roads-major',
       type: 'line',
-      source: 'линии',
-      'source-layer': 'lines',
+      source: 'osm_line',
+      'source-layer': 'planet_osm_line',
       filter: ['match', ['get', 'highway'], ['motorway', 'trunk', 'primary'], true, false],
       paint: {
         'line-color': '#1a5276',
@@ -140,10 +144,10 @@ const СТИЛЬ_ТЁМНОЙ_КАРТЫ = {
       },
     },
     {
-      id: 'дороги-второстепенные',
+      id: 'roads-minor',
       type: 'line',
-      source: 'линии',
-      'source-layer': 'lines',
+      source: 'osm_line',
+      'source-layer': 'planet_osm_line',
       minzoom: 10,
       filter: ['match', ['get', 'highway'], ['secondary', 'tertiary', 'residential'], true, false],
       paint: { 'line-color': '#0d3b6e', 'line-width': 1 },

@@ -123,68 +123,101 @@ export function СтраницаРендера() {
 
 ---
 
-## Puppeteer — захват кадров
+## Puppeteer — захват кадров (pipe в FFmpeg, без записи PNG на диск)
 
-**КРИТИЧНО:** запускать с флагами для WebGL, иначе PixiJS не работает:
+**КРИТИЧНО:** запускать с флагами для WebGL. Кадры идут напрямую в stdin FFmpeg — это экономит до 50+ ГБ временных файлов для 4K60p и ускоряет рендер в 2-3 раза.
 
 ```typescript
 import puppeteer from 'puppeteer';
+import { spawn } from 'node:child_process';
 
-async function захватитьКадры(
+async function renderVideo(
   jobId: string,
-  состояние: СостояниеКарты,
-  обновитьПрогресс: (п: number) => void
+  state: MapState,
+  updateProgress: (p: number) => void
 ): Promise<string> {
-  const [ширина, высота] = состояние.настройкиВидео.разрешение.split('x').map(Number);
-  const папкаКадров = `/tmp/render/${jobId}/frames`;
-  await fs.mkdir(папкаКадров, { recursive: true });
+  const [width, height] = state.video.resolution.split('x').map(Number);
+  const { fps, duration, format } = state.video;
+  const totalFrames = fps * duration;
+  const outputPath = `/data/videos/${state.userId}/${jobId}.${format}`;
 
-  const браузер = await puppeteer.launch({
+  const browser = await puppeteer.launch({
     headless: 'new',
     args: [
-      '--use-gl=angle',           // ОБЯЗАТЕЛЬНО для WebGL/PixiJS
-      '--use-angle=swiftshader',  // программный рендерер
+      '--use-gl=angle',
+      '--use-angle=swiftshader',   // программный WebGL — работает и в WSL2, и на сервере без GPU
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      `--window-size=${ширина},${высота}`,
+      `--window-size=${width},${height}`,
     ],
   });
+  const page = await browser.newPage();
+  await page.setViewport({ width, height, deviceScaleFactor: 1 });
 
-  const страница = await браузер.newPage();
-  await страница.setViewport({ width: ширина, height: высота, deviceScaleFactor: 1 });
+  updateProgress(5);
 
-  обновитьПрогресс(5);
+  // Бэкенд и puppeteer в одной Docker-сети — ходим на frontend по имени сервиса
+  await page.goto(`http://frontend:3000/render-page?job_id=${jobId}`);
+  await page.waitForFunction(() => (window as any).mapReady === true, { timeout: 30000 });
+  updateProgress(10);
 
-  // Открываем страницу рендера
-  await страница.goto(`http://localhost:3000/render-page?job_id=${jobId}`);
+  // Запускаем FFmpeg, кадры в stdin как PNG поток
+  const ffmpeg = spawn('ffmpeg', [
+    '-y',
+    '-f', 'image2pipe',
+    '-framerate', String(fps === 50 ? 25 : fps),   // 50i = 25 кадров прогрессивных, позже интерлейсим
+    '-i', '-',
+    ...buildOutputArgs(format, fps, `${width}x${height}`),
+    outputPath,
+  ]);
+  ffmpeg.stderr.on('data', (d) => логгер.debug(d.toString()));
+  const ffmpegDone = new Promise<void>((res, rej) => {
+    ffmpeg.on('close', (code) => code === 0 ? res() : rej(new Error(`ffmpeg exit ${code}`)));
+  });
 
-  // Ждём загрузки карты (тайлы, ассеты)
-  await страница.waitForFunction(() => window.картаГотова === true, { timeout: 30000 });
+  // Покадровый захват
+  for (let frame = 0; frame < totalFrames; frame++) {
+    await page.evaluate((t) => {
+      (window as any).masterTimeline.seek(t, false);
+      (window as any).pixiApp.renderer.render((window as any).pixiApp.stage);
+    }, frame / fps);
 
-  обновитьПрогресс(10);
-
-  const { fps, длительность } = состояние.настройкиВидео;
-  const всегоКадров = fps * длительность;
-
-  // Покадровый захват через GSAP таймлайн
-  for (let кадр = 0; кадр < всегоКадров; кадр++) {
-    // Перематываем таймлайн на нужное время
-    await страница.evaluate((время) => {
-      window.мастерТаймлайн.seek(время, false);
-      window.пиксиПриложение.renderer.render(window.пиксиПриложение.stage);
-    }, кадр / fps);
-
-    await страница.screenshot({
-      path: `${папкаКадров}/${String(кадр).padStart(6, '0')}.png`,
-      clip: { x: 0, y: 0, width: ширина, height: высота },
+    const buf = await page.screenshot({
+      type: 'png',
+      clip: { x: 0, y: 0, width, height },
+      omitBackground: false,
     });
-
-    // 70% прогресса — захват кадров
-    обновитьПрогресс(10 + Math.floor((кадр / всегоКадров) * 70));
+    ffmpeg.stdin.write(buf);
+    updateProgress(10 + Math.floor((frame / totalFrames) * 70));
   }
 
-  await браузер.close();
-  return папкаКадров;
+  ffmpeg.stdin.end();
+  await browser.close();
+  await ffmpegDone;
+  updateProgress(85);
+
+  return outputPath;
+}
+
+function buildOutputArgs(format: 'mp4' | 'mxf', fps: number, res: string): string[] {
+  if (format === 'mp4') {
+    return [
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+      '-preset', 'slow', '-crf', '18',
+      '-s', res, '-r', String(fps), '-movflags', '+faststart',
+    ];
+  }
+  // MXF — MPEG-2, XDCAM-совместимый
+  const args = [
+    '-c:v', 'mpeg2video', '-pix_fmt', 'yuv422p',
+    '-q:v', '2', '-s', res, '-r', String(fps === 50 ? 25 : fps),
+  ];
+  if (fps === 50) {
+    // 50i — интерлейс из 25p прогрессивного источника
+    args.push('-vf', 'tinterlace=4,fieldorder=tff', '-flags', '+ilme+ildct', '-top', '1');
+  }
+  args.push('-f', 'mxf');
+  return args;
 }
 ```
 
@@ -243,11 +276,13 @@ async function создатьМиниатюру(первыйКадр: string, в
 ```
 0-5%    Инициализация Puppeteer
 5-10%   Загрузка карты в браузере
-10-80%  Захват кадров
-80-95%  FFmpeg сборка видео
-95-98%  Создание миниатюры
-98-100% Сохранение в БД, очистка /tmp
+10-80%  Захват кадров (+ pipe в FFmpeg параллельно)
+80-95%  Ждём завершения FFmpeg (последние буферы)
+95-98%  Создание миниатюры (первый кадр через ffmpeg -ss 0 ... -vframes 1)
+98-100% Запись в таблицу videos, удаление render_job
 ```
+
+**Миниатюра** создаётся отдельным вызовом FFmpeg по готовому файлу, не требует сохранения отдельного PNG во время рендера.
 
 ---
 
@@ -281,31 +316,73 @@ async function запуститьПоллинг(jobId: string): Promise<void> {
 
 ---
 
-## Очередь рендеров
+## Очередь рендеров (persistent в PostgreSQL)
+
+Источник истины — таблица `render_jobs` (см. task2.md). In-memory держим только активный воркер.
 
 ```typescript
-// Простая in-memory очередь (достаточно для 3-5 пользователей)
-const очередь: string[] = [];
-let активный: string | null = null;
-
-async function добавитьВОчередь(jobId: string): Promise<void> {
-  очередь.push(jobId);
-  await обновитьСтатус(jobId, { статус: 'queued', прогресс: 0 });
-  if (!активный) обработатьСледующий();
+// При старте бэкенда (в т.ч. после рестарта/краша):
+//  1. Найти все render_jobs в статусе 'running' — пометить 'error' (сессия потеряна)
+//  2. Начать обработку очереди из 'queued' заданий по created_at
+async function recoverAndStart(): Promise<void> {
+  await db.query(`
+    UPDATE render_jobs SET status = 'error',
+      error_message = 'Рендер прерван рестартом сервера', updated_at = NOW()
+    WHERE status = 'running'
+  `);
+  processNextJob();
 }
 
-async function обработатьСледующий(): Promise<void> {
-  if (очередь.length === 0) { активный = null; return; }
-  активный = очередь.shift()!;
+let activeJobId: string | null = null;
+
+async function processNextJob(): Promise<void> {
+  if (activeJobId) return;
+  const { rows } = await db.query(`
+    UPDATE render_jobs SET status = 'running', updated_at = NOW()
+    WHERE id = (
+      SELECT id FROM render_jobs WHERE status = 'queued'
+      ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    RETURNING *
+  `);
+  if (rows.length === 0) return;
+  activeJobId = rows[0].id;
+
   try {
-    await выполнитьРендер(активный);
-  } catch (ошибка) {
-    await обновитьСтатус(активный, { статус: 'error', ошибка: String(ошибка) });
+    const outputPath = await renderVideo(rows[0].id, rows[0].state_json, async (p) => {
+      await db.query('UPDATE render_jobs SET progress = $1, updated_at = NOW() WHERE id = $2', [p, rows[0].id]);
+    });
+    await db.query(`UPDATE render_jobs SET status = 'done', progress = 100,
+      output_path = $1, updated_at = NOW() WHERE id = $2`, [outputPath, rows[0].id]);
+  } catch (err) {
+    await db.query(`UPDATE render_jobs SET status = 'error',
+      error_message = $1, updated_at = NOW() WHERE id = $2`, [String(err), rows[0].id]);
   } finally {
-    обработатьСледующий();
+    activeJobId = null;
+    setImmediate(processNextJob);
   }
 }
+
+// Ограничение: один активный рендер на пользователя
+async function enqueueRender(userId: string, state: MapState): Promise<string> {
+  const existing = await db.query(
+    `SELECT id FROM render_jobs WHERE user_id = $1 AND status IN ('queued','running') LIMIT 1`,
+    [userId]
+  );
+  if (existing.rows.length > 0) {
+    throw { status: 429, ошибка: 'У вас уже есть активный рендер' };
+  }
+  const { rows } = await db.query(
+    `INSERT INTO render_jobs (user_id, status, progress, state_json)
+     VALUES ($1, 'queued', 0, $2) RETURNING id`,
+    [userId, state]
+  );
+  setImmediate(processNextJob);
+  return rows[0].id;
+}
 ```
+
+**Graceful shutdown:** на SIGTERM бэкенд перестаёт брать новые задания и ждёт завершения текущего (до таймаута, после — kill puppeteer и пометить 'error').
 
 ---
 
