@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    shm_size: 512m
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks: [mapvideo_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  martin:
+    image: ghcr.io/maplibre/martin:v0.14.2
+    command:
+      - --config
+      - /config/config.yaml
+      - --cache-size
+      - "4096"
+      - --workers
+      - "8"
+      - --pool-size
+      - "40"
+      - --preferred-encoding
+      - gzip
+    env_file: .env
+    volumes:
+      - ./martin:/config
+    ports:
+      - "127.0.0.1:3002:3000"
+    networks: [mapvideo_net]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    command: osrm-routed --algorithm mld ${OSRM_DATA_PATH}
+    volumes:
+      - ./osm-data:/data
+    ports:
+      - "127.0.0.1:5000:5000"
+    networks: [mapvideo_net]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5000 && printf 'GET /route/v1/driving/37.618,55.751;30.315,59.939 HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  backend:
+    build: ./backend
+    env_file: .env
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks: [mapvideo_net]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 15s
+      retries: 3
+    volumes:
+      - ./data/videos:/data/videos
+      - ./assets:/app/assets:ro
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [mapvideo_net]
+    depends_on: [backend]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  mapvideo_net:
+    driver: bridge
+
+volumes:
+  postgres_data:

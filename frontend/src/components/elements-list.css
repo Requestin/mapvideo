@@ -1,0 +1,123 @@
+.elements-list {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  /* Panel widens only when opened — collapsed state is just the trigger pill. */
+  width: auto;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.elements-list__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(26, 26, 26, 0.9);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.elements-list__trigger:hover {
+  background: rgba(40, 40, 40, 0.95);
+}
+
+.elements-list--open .elements-list__trigger {
+  /* Visually tie the trigger to the dropdown — no seam between them. */
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+.elements-list__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.elements-list__chevron {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  margin-left: 2px;
+}
+
+.elements-list__body {
+  width: var(--layout-sidebar-left);
+  background: rgba(26, 26, 26, 0.9);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  padding: 10px 12px 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.elements-list__empty {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.elements-list__items {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.elements-list__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.elements-list__item:hover,
+.elements-list__item--hover {
+  background: var(--color-bg-hover);
+}
+
+.elements-list__item--active {
+  background: rgba(61, 139, 255, 0.18);
+}
+
+.elements-list__item--active:hover,
+.elements-list__item--active.elements-list__item--hover {
+  background: rgba(61, 139, 255, 0.28);
+}
+
+.elements-list__kind {
+  color: var(--color-accent);
+  font-size: 12px;
+  width: 14px;
+  text-align: center;
+}
+
+.elements-list__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

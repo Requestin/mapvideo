@@ -1,0 +1,23 @@
+.full-screen-spinner {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-page);
+}
+
+.full-screen-spinner__dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--color-border-light);
+  border-top-color: var(--color-accent);
+  animation: full-screen-spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes full-screen-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}

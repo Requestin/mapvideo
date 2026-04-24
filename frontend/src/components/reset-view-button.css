@@ -1,0 +1,18 @@
+.reset-view-button {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 40px;
+  height: 40px;
+  background: rgba(26, 26, 26, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-size: 18px;
+  z-index: 10;
+}
+
+.reset-view-button:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}

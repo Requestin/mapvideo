@@ -1,0 +1,35 @@
+services:
+  backend:
+    command: npm run dev
+    volumes:
+      # Образ мог собираться без актуального npm ci — dev-зависимости и puppeteer с хоста.
+      - ./backend/node_modules:/app/node_modules
+      - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json
+      - ./backend/tsconfig.json:/app/tsconfig.json
+    environment:
+      NODE_ENV: development
+      # Plain HTTP on localhost — Secure cookies would never stick without TLS.
+      COOKIE_SECURE: "false"
+      # Puppeteer (рендер) открывает /render-page — с хоста 127.0.0.1:3000 внутри контура backend недоступен.
+      FRONTEND_URL: http://frontend:3000
+  frontend:
+    command: npm run dev -- --host 0.0.0.0
+    volumes:
+      # Образ serve не содержит devDependencies (vite) — берём с хоста после npm ci.
+      - ./frontend/node_modules:/app/node_modules
+      - ./frontend/src:/app/src
+      - ./frontend/tests:/app/tests
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/tsconfig.app.json:/app/tsconfig.app.json
+      - ./frontend/tsconfig.node.json:/app/tsconfig.node.json
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/vitest.config.ts:/app/vitest.config.ts
+    environment:
+      NODE_ENV: development
+      # Vite внутри контейнера не должен бить в 127.0.0.1:3001 — там нет бэка.
+      VITE_DEV_PROXY_API: http://backend:3001
+      VITE_DEV_PROXY_ASSETS: http://backend:3001
+      VITE_DEV_PROXY_TILES: http://martin:3000

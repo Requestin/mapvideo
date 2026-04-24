@@ -1,0 +1,73 @@
+.right-sidebar {
+  /* task12: overlay positioned inside the preview — previously a fixed
+     grid column. Floats at the top-right of the canvas, capped height
+     so long settings lists scroll internally. */
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 11;
+  width: var(--layout-sidebar-right);
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  background: rgba(26, 26, 26, 0.95);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.right-sidebar__hint {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.right-sidebar__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.right-sidebar__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.right-sidebar__title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}
+
+.right-sidebar__close {
+  font-size: 20px;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.right-sidebar__close:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.right-sidebar__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.right-sidebar__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border);
+}

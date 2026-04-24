@@ -1,0 +1,122 @@
+:root {
+  --color-bg-page: #0d0d0d;
+  --color-bg-panel: #1a1a1a;
+  --color-bg-panel-2: #222222;
+  --color-bg-input: #2a2a2a;
+  --color-bg-hover: #333333;
+  --color-text-primary: #f0f0f0;
+  --color-text-secondary: #888888;
+  --color-accent: #3d8bff;
+  --color-accent-hover: #5a9fff;
+  --color-danger: #ff4444;
+  --color-success: #44bb44;
+  --color-border: #333333;
+  --color-border-light: #444444;
+
+  /* Layout constants used across shell chrome */
+  --layout-header-height: 48px;
+  /* task12: bottom toolbar enlarged ~+50% (56 → 84). Buttons inside
+     override padding/font via .bottom-toolbar .app-button — see
+     bottom-toolbar.css. */
+  --layout-toolbar-height: 84px;
+  --layout-sidebar-left: 200px;
+  --layout-sidebar-right: 320px;
+  --layout-drawer-width: 480px;
+
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  min-width: 1280px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  padding: 8px 10px;
+  border-radius: 4px;
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-accent);
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-accent-hover);
+}
+
+.app-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 4px;
+  background: var(--color-bg-panel-2);
+  color: var(--color-text-primary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.app-button:hover {
+  background: var(--color-bg-hover);
+}
+
+.app-button--primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.app-button--primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.app-button--danger {
+  color: var(--color-danger);
+}
+
+.app-button--danger:hover {
+  background: rgba(255, 68, 68, 0.1);
+}
+
+.app-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

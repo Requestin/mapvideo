@@ -1,0 +1,29 @@
+.render-page {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.render-page--transparent {
+  background: transparent;
+}
+
+.render-page--loading,
+.render-page--error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+}
+
+.render-page--error {
+  color: #f66;
+}
+
+.render-page .editor-map {
+  width: 100%;
+  height: 100%;
+}

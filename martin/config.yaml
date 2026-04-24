@@ -1,0 +1,31 @@
+worker_processes: 8
+preferred_encoding: gzip
+
+postgres:
+  connection_string: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_GIS_DB}?sslmode=disable
+  pool_size: 40
+  auto_publish: false
+  functions:
+    mv_roads:
+      schema: public
+      function: mv_roads
+      minzoom: 0
+      maxzoom: 18
+    mv_water:
+      schema: public
+      function: mv_water
+      minzoom: 0
+      maxzoom: 18
+    mv_landuse:
+      schema: public
+      function: mv_landuse
+      minzoom: 0
+      maxzoom: 18
+
+cache:
+  size_mb: 4096
+  tile_size_mb: 3584
+  tile_expiry: 30d
+  tile_idle_timeout: 7d
+  minzoom: 0
+  maxzoom: 18

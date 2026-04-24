@@ -20,6 +20,7 @@ logs/
 osm-data/*
 !osm-data/.gitkeep
 data/videos/
+backend/tests/tmp-videos/
 
 # Cursor: только локальное состояние, правила/скиллы коммитим
 .cursor/state/

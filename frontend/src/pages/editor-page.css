@@ -1,0 +1,102 @@
+.editor-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-page);
+}
+
+.editor-page__body {
+  /* task12: right column no longer holds a 320 px sidebar — both
+     side panels are rendered as overlays inside the preview so the
+     16:9 canvas keeps its full width. */
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Stage fills the available space between header/toolbar and right
+   sidebar. It centers a 16:9 preview box inside itself, letterboxing
+   horizontally or vertically so the ratio is always preserved. */
+.editor-page__stage {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-bg-page);
+}
+
+.editor-page__preview {
+  position: relative;
+  box-sizing: border-box;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* task6: route-build mode changes the cursor globally within the preview
+   so the user knows clicks are captured for route construction. We flip
+   the map canvas, Pixi overlay, and the transparent event-layer together
+   — any one of them going back to the default `grab` cursor would break
+   the affordance. `!important` unfortunately needed because MapLibre
+   sets its cursor inline. */
+.editor-page--route-build .editor-map__canvas,
+.editor-page--route-build .editor-map__canvas canvas,
+.editor-page--route-build .editor-map__overlay,
+.editor-page--route-build canvas {
+  cursor: crosshair !important;
+}
+
+/* Non-blocking instruction banner during route-build. `pointer-events:
+   none` so it never swallows clicks meant for the map underneath. */
+.route-build-hint {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  background: rgba(13, 13, 13, 0.85);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-light);
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.3;
+  pointer-events: none;
+  z-index: 20;
+  backdrop-filter: blur(6px);
+}
+
+/* task8: не блокируем клики — только визуальный оверлей прогресса. */
+.render-progress-overlay {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  z-index: 19;
+  padding: 10px 12px;
+  background: rgba(13, 13, 13, 0.9);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+.render-progress-overlay__bar {
+  height: 3px;
+  margin-bottom: 8px;
+  background: var(--color-accent, #3b82f6);
+  border-radius: 2px;
+  max-width: 100%;
+  transition: width 0.2s ease;
+}
+
+.render-progress-overlay__text {
+  margin: 0;
+}

@@ -1,0 +1,61 @@
+.geo-title-overlay {
+  position: absolute;
+  z-index: 24;
+  display: flex;
+  align-items: stretch;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.geo-title-overlay__tail {
+  flex: 0 0 auto;
+  height: 100%;
+  background-image: url('/assets/geo/hvost.png');
+  background-size: 100% 100%;
+  background-position: left center;
+  background-repeat: no-repeat;
+  background-color: #8f2425;
+}
+
+.geo-title-overlay__body {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #9a2829 0%, #a80000 100%);
+  overflow: hidden;
+}
+
+.geo-title-overlay__body::before,
+.geo-title-overlay__body::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 7%;
+  pointer-events: none;
+}
+
+.geo-title-overlay__body::before {
+  top: 0;
+  background: linear-gradient(to bottom, #984946 0%, rgba(152, 73, 70, 0) 100%);
+}
+
+.geo-title-overlay__body::after {
+  bottom: 0;
+  background: linear-gradient(to top, #984946 0%, rgba(152, 73, 70, 0) 100%);
+}
+
+.geo-title-overlay__text {
+  position: relative;
+  z-index: 1;
+  display: block;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+  user-select: none;
+}

@@ -1,8 +1,9 @@
 # Фаза 6 — Маршруты
 
-**Статус:** Не начато
+**Статус:** ✅ Завершено
 **Связанные файлы:** SPEC.md (раздел "Маршрут")
 **Зависит от:**
+
 - task4.md — PixiJS слой, координаты↔пиксели, overlay событий
 - task5.md — точки на карте (маршруты соединяют точки созданные там)
 - task2.md — авторизация middleware для защищённых API
@@ -11,19 +12,22 @@
 ---
 
 ## Цель фазы
-Реализовать построение маршрутов между точками, все виды линий,
+
+## Реализовать построение маршрутов между точками, все виды линий,
+
 иконки транспорта с движением, OSRM интеграцию, дуги.
----
 
 ## Skills для этой фазы
 
-| Skill | Когда активировать |
-|-------|--------------------|
-| **mastering-typescript** | При написании TypeScript/React кода |
-| **frontend-design** | При создании UI меню настроек маршрутов |
-| **systematic-debugging** | При отладке OSRM интеграции и MotionPath анимаций |
+
+| Skill                    | Когда активировать                                                 |
+| ------------------------ | ------------------------------------------------------------------ |
+| **mastering-typescript** | При написании TypeScript/React кода                                |
+| **frontend-design**      | При создании UI меню настроек маршрутов                            |
+| **systematic-debugging** | При отладке OSRM интеграции и MotionPath анимаций                  |
 | **api-contract-checker** | При изменении `GET /api/route` запроса/ответа и fallback-семантики |
-| **spec-driven-workflow** | Для удержания фазы в рамках `task6.md` и пошаговой проверки |
+| **spec-driven-workflow** | Для удержания фазы в рамках `task6.md` и пошаговой проверки        |
+
 
 ### Когда skill указывать явно
 
@@ -35,23 +39,23 @@
 
 ## Задачи
 
-- [ ] Бэкенд: GET /api/route (проксирование OSRM)
-- [ ] Кнопка "Маршрут" (появляется при 2+ точках)
-- [ ] Режим построения маршрута (линия за курсором)
-- [ ] Отмена по Escape
-- [ ] Маршрут между двумя отмеченными точками
-- [ ] Маршрут со стрелкой (конец в произвольном месте)
-- [ ] Перестройка маршрута при перемещении точки
-- [ ] Удаление маршрута при удалении точки
-- [ ] Анимация прямой линии (пульсация)
-- [ ] Анимация пунктирной линии (движение А→Б циклично)
-- [ ] Иконки транспорта (автомобиль, самолёт, вертолёт, корабль)
-- [ ] Поворот иконки по направлению движения
-- [ ] Маршрут по дороге (OSRM) для автомобиля
-- [ ] Маршрут дугой для самолёта/вертолёта/корабля
-- [ ] Стрелка на конце (масштабируется с толщиной)
-- [ ] Меню настроек маршрута (правая панель) с live preview
-- [ ] Список маршрутов в левой панели
+- Бэкенд: GET /api/route (проксирование OSRM)
+- Кнопка "Маршрут" (появляется при 2+ точках)
+- Режим построения маршрута (линия за курсором)
+- Отмена по Escape
+- Маршрут между двумя отмеченными точками
+- Маршрут со стрелкой (конец в произвольном месте)
+- Перестройка маршрута при перемещении точки
+- Удаление маршрута при удалении точки
+- Анимация прямой линии (пульсация)
+- Анимация пунктирной линии (движение А→Б циклично)
+- Иконки транспорта (автомобиль, самолёт, вертолёт, корабль)
+- Поворот иконки по направлению движения
+- Маршрут по дороге (OSRM) для автомобиля
+- Маршрут дугой для самолёта/вертолёта/корабля
+- Стрелка на конце (масштабируется с толщиной)
+- Меню настроек маршрута (правая панель) с live preview
+- Список маршрутов в левой панели
 
 ---
 
@@ -307,7 +311,13 @@ function createTransportIcon(
   videoDuration: number,
   options?: { deterministicClock?: () => number; registerCleanup?: (fn: () => void) => void }
 ): PIXI.Sprite {
-  const icon = PIXI.Sprite.from(`/assets/icons/${settings.icon}.png`); // car | plane | helicopter | ship
+  const icon = PIXI.Sprite.from(`/assets/icons/${settings.icon}.png`); // car | airplane | helicopter | ship
+  // ВАЖНО: нативный размер спрайта = 1x1 до загрузки текстуры.
+  // Используем утилиту sizeSpriteToPixels (pixi/sprite-sizing.ts, task10),
+  // которая дожидается `baseTexture.valid` и только потом выставляет
+  // icon.width/height из settings.iconSize. Без неё на первом кадре
+  // иконка транспорта будет невидимой точкой.
+  sizeSpriteToPixels(icon, settings.iconSize);
   icon.anchor.set(0.5);
 
   // В превью по умолчанию используем real-time clock.
@@ -413,5 +423,180 @@ function rebuildRoutesForPoint(pointId: string): void {
 
 ---
 
+## Применение к текущей архитектуре (после task10–14)
+
+Примеры выше писались в начале проекта — до того, как определились основные
+подсистемы редактора. Реализация task6 **должна встраиваться в существующую
+архитектуру**, а не создавать параллельную. Ниже — обязательные точки интеграции,
+выявленные по ходу task5/10–14:
+
+### Состояние
+
+- Маршруты хранятся в `state/editor-state.tsx` (тот же reducer, что и точки/подписи),
+а не в модульных `let routeBuildMode / startPoint / routes`.
+Actions: `addRoute`, `updateRouteSettings`, `removeRoute`, `setRouteBuildMode`.
+- `routeBuildMode` = `null | { startPointId: string }` в state, не в замыкании.
+- Удаление точки через `removePoint` делает каскадное удаление связанных маршрутов
+(как уже делает для подписи — task5). `rebuildRoutesForPoint` — это реакция
+reducer'а на `updatePointCoordinates`, а не императивный вызов.
+
+### Рендер в PIXI
+
+- Маршрут — это ещё один тип `Record` в `pixi/pixi-layer.tsx` (наряду с `point`/`label`),
+с полем `dispose()` и обновлением в reconcile по `state.routes`.
+Никакого `route.pixiContainer` в state — Pixi-ресурсы живут в `recordsRef` внутри слоя.
+- Sync позиций маршрутов — в том же `syncPositions()` по `map.on('render')`
+(через `map.project(lngLat)` — координаты маршрута хранятся в `lng/lat`, а рисуются в пикселях).
+- Тикер-анимации (пульсация solid, движение пунктира, ход транспорта)
+регистрируются **в общем `pixi.ticker`** через фабрики по аналогии с
+`createPointAnimation` из task5; каждая фабрика возвращает `dispose()`, который
+вызывается из record.dispose() при reconcile-удалении и из effect-cleanup
+при unmount. Не писать один глобальный `ticker.add(() => for (const r of routes.values()) {...})`
+— он не переживёт StrictMode double-invoke.
+- Teardown обязан быть StrictMode-safe: проверка `pixi.stage` перед `removeChild`
+и `try/catch` вокруг `record.dispose()` — так же, как в hover-ring и record-teardown
+после фиксов task10/текущей сессии.
+
+### Иконки транспорта
+
+- Файлы в `assets/icons/` называются `car.png`, `airplane.png`, `helicopter.png`, `ship.png`
+(см. SPEC «Ассеты»). В `RouteSettings.icon` держим идентификатор ровно этим же словарём
+(`'car' | 'airplane' | 'helicopter' | 'ship' | 'none'`).
+- Размер иконки выставляем через `sizeSpriteToPixels(icon, settings.iconSize)`
+(task10) — иначе до загрузки PNG будет 1×1.
+- Zoom-зависимое масштабирование иконки + стрелки — тем же правилом, что у точек
+(`scale = clamp(0.3 + (zoom-2)*0.06, 0.3, 1.3)`, task10), чтобы маршрут
+и связанные точки не расходились в размере.
+
+### Hit-test для режима построения
+
+- `findPointUnderCursor(x, y)` из примера — это `hitRegistry.pickTarget(x, y)`
+с фильтром `target.type === 'point'` (registry уже заполняется `PixiLayer.syncPositions`
+в task5). Не изобретать свой pick-loop.
+- Клик в route-build-mode ловим на том же overlay-слое MapLibre, что и drag точек
+(`use-element-drag.ts` / `editor-map.tsx`), а не через `document.addEventListener`.
+
+### Escape и прочие глобальные клавиши
+
+- Глобальный `keydown`-обработчик Escape обязан уважать `modalOpenRef` из task12:
+если открыта модалка/дропдаун — Esc уходит им, а не сбрасывает route-mode.
+Новый handler заводим **рядом** с существующим в `editor-page.tsx`, а не
+делаем второй независимый listener на window.
+
+### Правая панель и цветовые поля
+
+- Меню настроек маршрута — новый компонент `RouteSettingsPanel`
+в `components/right-sidebar/`, выбирается из `RightSidebar` по
+`selectedElement.type === 'route'` (`RightSidebar` уже работает как absolute-оверлей,
+закрывается по Esc/клик по пустой карте — task12; ничего дополнительно
+не трогаем).
+- Все цветовые поля (линия, окантовка, стрелка) — через существующий `ColorField`
+(поповер + пресеты + кастомные, task14). Голый `<input type="color">` не использовать —
+он выбивается из UX остальных панелей.
+- Inline-компоненты внутри `RouteSettingsPanel` **поднимать на уровень модуля**
+(как `*Controls` в `PointSettingsPanel` после task11), иначе React на каждом
+ре-рендере будет пересоздавать `<input type="range">` и ломать drag ползунков.
+
+### Бэкенд: `/api/route`
+
+- `OSRM_URL` читаем из env (default `http://osrm:5000` для compose), по аналогии
+с `MARTIN_URL` и `PHOTON_URL`. Это нужно тестам (подмена на mock-сервер) и
+локальному запуску вне compose.
+- Для `ASSETS_DIR` уже есть `resolveAssetsDir()` (`backend/src/utils/resolve-assets.ts`) —
+транспортные иконки отдаются тем же `express.static(ASSETS_DIR)`, отдельной настройки
+не требуется.
+- Логи ошибок/fallback — на русском (в формате `logger.warn({ err }, 'OSRM недоступен ...')`).
+- `requireAuth` обязателен; CSRF — только на мутирующих роутах (на `/route` не нужен,
+т.к. `GET`).
+
+### Тесты
+
+- Бэк: добавить кейсы в `tests/misc.test.ts` (или отдельный `tests/route.test.ts`) —
+happy-path с mock-OSRM (`nock`/подмена `global.fetch`), 404 `code !== 'Ok'`,
+fallback при недоступном OSRM.
+- Фронт: регрессионный тест на `RouteSettingsPanel` (identity-check полей после
+`onChange`, по шаблону `point-settings-panel.test.tsx` из task11), и тест
+на действие `activateRouteBuildMode` / `setRouteBuildMode(null)` в reducer.
+- Keep 46/46 бэк + актуальный счёт фронта зелёными.
+
+---
+
 ## Заметка для следующей сессии
-*(заполняется завершения задачи или перед завершением сессии)*
+
+### Что сделано фактически
+
+- **Типы (`state/types.ts`):** добавлены `RouteLineType`, `RouteTransportIcon`,
+`RouteSettings`, `RouteEndpoint`, `MapRoute` с полем `osrmCoordinates: LngLat[] | null`
+для кэша дорожной геометрии; `defaultRouteSettings()` (solid, синий, stroke включён,
+icon='none'); `MapElementKind` расширен `'route'`.
+- **State (`state/editor-state.tsx`):** новые экшены `addRoute`, `updateRouteSettings`,
+`setRouteOsrmCoordinates`, `resetRouteSettings`, `setRouteBuildMode` +
+`routeBuildMode` в контексте. `removeElement` каскадно удаляет все маршруты,
+ссылающиеся на точку; `moveElement` сбрасывает `osrmCoordinates` для маршрутов,
+касающихся двинувшейся точки, — `useEffect` в `EditorWorkspace` потом
+перезапрашивает OSRM. Переключение `useRoadRoute` также инвалидирует кэш.
+- **Backend (`backend/src/routes/route.ts`):** `GET /api/route?start=lng,lat&end=...&mode=driving|straight`
+— прокси к OSRM (`OSRM_URL`, default `http://osrm:5000`, `OSRM_TIMEOUT_MS`=6000),
+всегда отвечает 200 с `{coordinates, distance, duration, fallback}`.
+`fallback: true` — при non-200, `code !== 'Ok'` или таймауте (`AbortController`);
+геометрия — `[start, end]` прямой. Логи предупреждений на русском.
+Завёрнут `requireAuth`; зарегистрирован в `backend/src/app.ts`.
+- **Frontend API (`frontend/src/api/routes.ts`):** `fetchRoute()` через
+`http` (axios + CSRF), `RouteFetchResult`.
+- **Build-mode (`components/bottom-toolbar.tsx` + `editor-workspace.tsx`):**
+кнопка «↗ Маршрут» — toggle `routeBuildMode` (active-style, disabled <2 точек).
+Клик 1 — только по `point` (через `hitRegistry.pickTarget` + фильтр shape='rect'),
+клик 2 — либо по другой точке, либо `pixelsToCoordinates` → `coordinates`-endpoint.
+Escape приоритетнее гасит build-mode, чем оверлеи (учитывает `modalOpenRef` task12).
+Preview-линия — Graphics-overlay в PixiLayer, курсор из `mousemove` обновляется
+через ref (без re-render), при `mouseout` — скрывается. Курсор `crosshair`
+через класс `editor-page--route-build` (с `!important`, т.к. MapLibre ставит
+inline `cursor: grab`).
+- **PIXI (`pixi/routes/path.ts` + `pixi/routes/route-render.ts`
+  - `pixi/pixi-layer.tsx`):** `RouteRecord` как очередной тип в
+  общем `recordsRef` с `dispose()`. Геометрия — `computeRoutePathLngLat`
+  (priority: OSRM кэш → `computeArcPoints` (sin(π·t)·20%) → прямая).
+  `redraw(timeMs)`: `solid` — пульсация alpha по `sin(timeMs·speed)`,
+  `dashed` — смещение dash offset. Stroke-обводка рисуется первым слоем.
+  Стрелка (`drawArrowHead`) — в конечной точке по углу из `sampleAlongPolyline(1)`.
+  Транспортная иконка — `PIXI.Sprite` из `/assets/icons/<icon>.png` через
+  `sizeSpriteToPixels` (task10), позиционируется и поворачивается
+  `sampleAlongPolyline(t)` где `t = (timeMs·speed) % 1`, alpha ease-in/out.
+  Ticker добавлен только здесь (единый `pixi.ticker.add(handler)`) — реконсилер
+  удаляет record'ы безопасно (`try/catch` вокруг `dispose()`, проверка `pixi.stage`).
+- **Hit-test (`use-element-hover.ts` + `use-element-drag.ts`):**
+`polyline`-таргеты пропускаются — маршруты в v1 выбираются только через
+список слева, не перехватывают drag/hover.
+- **Right-sidebar (`right-sidebar/route-settings-panel.tsx` + `right-sidebar.tsx`):**
+новая панель на базе `SettingsSection` + `SelectField` (lineType, icon) +
+`ColorField` (line, stroke) + `SliderField` (thickness/opacity/speed/stroke.size/.opacity)
+  - `CheckboxField` (stroke.enabled, useRoadRoute — только для `car`, arc — только для
+  airplane/helicopter/ship). Sub-секции (`LineSection`/`StrokeSection`/`IconSection`)
+  подняты на уровень модуля (task11-паттерн), чтобы range-drag не рвался.
+  Кнопки «Сбросить настройки» / «Удалить» + `ConfirmDialog`.
+- **ElementsList:** имя маршрута строится **на лету** из текущих labels точек —
+переименование точки моментально отражается в списке без дополнительного экшена.
+- **Тесты:**
+  - Backend `tests/misc.test.ts` — 6 новых кейсов на `/api/route` (401, 400 на
+  кривых координатах, happy path с mocked `fetch`, fallback при non-200 /
+  `code: 'NoRoute'` / timeout). Все 52 теста бэка зелёные.
+  - Frontend `tests/editor-state-route.test.tsx` — addRoute (label, endpoint
+  варианты), updateRouteSettings (merge + stroke-атомарность), invalidation
+  OSRM-кэша при `useRoadRoute`/`moveElement`, каскад удаления, build-mode toggle.
+  - Frontend `tests/pixi-routes-path.test.ts` — `computeArcPoints` (длина/вершина),
+  `computeRoutePathLngLat` (OSRM cache priority, arc, coord-endpoint), 
+  `sampleAlongPolyline` (линейная интерполяция/clamp/мультисегмент/вырожденный путь).
+  - Обновлён `tests/editor-state.test.ts` (`route` factory) под новую форму `MapRoute`.
+  - Итог: frontend 75/75, backend 52/52, typecheck + vite build зелёные.
+
+### Известные ограничения / что дальше
+
+- Маршруты нельзя таскать/выделять кликом по линии (по SPEC — v1, выбор через
+список). Если потребуется — расширить `pickTarget` на `polyline` (hit-test с
+учётом `thickness`) и добавить подсветку hover-ring для polyline.
+- OSRM-запрос стартует в effect после `addRoute`; пока идёт fetch, рисуем прямую
+(быстрый визуальный отклик). Debounce не нужен — запрос дёргается максимум раз
+на маршрут и на `moveElement` обнулении кэша.
+- Зум-зависимое масштабирование транспортной иконки сейчас использует тот же
+`scale`, что и точки (через `sizeSpriteToPixels` + зум-коэффициент из task10).
+
