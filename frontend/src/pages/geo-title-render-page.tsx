@@ -25,6 +25,20 @@ export function GeoTitleRenderPage(): JSX.Element {
   const installedRef = useRef(false);
 
   useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+    html.classList.add('render-page-transparent-root');
+    body.classList.add('render-page-transparent-root');
+    root?.classList.add('render-page-transparent-root');
+    return () => {
+      html.classList.remove('render-page-transparent-root');
+      body.classList.remove('render-page-transparent-root');
+      root?.classList.remove('render-page-transparent-root');
+    };
+  }, []);
+
+  useEffect(() => {
     if (!jobId) {
       setErr('Нет job_id');
       return;

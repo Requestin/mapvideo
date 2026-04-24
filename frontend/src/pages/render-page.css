@@ -10,6 +10,12 @@
   background: transparent;
 }
 
+html.render-page-transparent-root,
+body.render-page-transparent-root,
+#root.render-page-transparent-root {
+  background: transparent !important;
+}
+
 .render-page--loading,
 .render-page--error {
   display: flex;

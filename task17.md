@@ -20,12 +20,14 @@
 **Проблема:** `unlink` вызывается по путям из БД без проверки, что путь внутри `VIDEOS_ROOT`. Комментарий обещает проверку, но она не реализована.
 
 **Решение:** Перед `unlink` проверять:
+
 ```typescript
 function isSafeToDelete(filePath: string): boolean {
   const resolved = path.resolve(filePath);
   return resolved.startsWith(VIDEOS_ROOT + path.sep);
 }
 ```
+
 Если не прошло — логировать предупреждение, не удалять.
 
 ---
@@ -57,6 +59,7 @@ function isSafeToDelete(filePath: string): boolean {
 **Проблема:** При удалении подписи у точки остаётся `labelId` ссылающийся на несуществующий элемент.
 
 **Решение:** При удалении label найти точку-владельца и обнулить `labelId`:
+
 ```typescript
 if (target.kind === 'label') {
   return prev.map(e =>
@@ -106,6 +109,7 @@ if (target.kind === 'label') {
 **Проблема:** Нет тестов с реальным ffmpeg.
 
 **Решение:** Добавить один интеграционный тест:
+
 - Создать 1-пиксельный PNG в памяти
 - Передать в `buildFfmpegOutputArgs` для mp4
 - Запустить ffmpeg, проверить что выходной файл создан и не пуст
