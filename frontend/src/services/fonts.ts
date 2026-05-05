@@ -21,6 +21,7 @@ export function loadAppFonts(): Promise<FontEntry[]> {
     if (fonts.length === 0) return fonts;
     injectFontFaces(fonts);
     if (typeof document === 'undefined' || !('fonts' in document)) return fonts;
+    await loadFontsViaFontFaceApi(fonts);
     await Promise.all(
       fonts.map((f) =>
         // Браузер ленится и не грузит начертания «про запас»: без явного
@@ -36,6 +37,29 @@ export function loadAppFonts(): Promise<FontEntry[]> {
   return loadPromise;
 }
 
+async function loadFontsViaFontFaceApi(fonts: FontEntry[]): Promise<void> {
+  const seen = new Set<string>();
+  await Promise.all(
+    fonts.map(async (f) => {
+      const key = `${f.family}|${f.weight}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      try {
+        const source = `url("${f.url}")`;
+        const face = new FontFace(f.family, source, {
+          weight: String(f.weight),
+          style: 'normal',
+          display: 'block',
+        });
+        const loaded = await face.load();
+        document.fonts.add(loaded);
+      } catch {
+        // Keep graceful fallback to CSS @font-face path below.
+      }
+    })
+  );
+}
+
 function injectFontFaces(fonts: FontEntry[]): void {
   if (typeof document === 'undefined') return;
   const existing = document.getElementById('mapvideo-fonts');
@@ -48,7 +72,7 @@ function injectFontFaces(fonts: FontEntry[]): void {
   style.textContent = fonts
     .map(
       (f) =>
-        `@font-face { font-family: "${f.family}"; src: url("${f.url}") format("${formatFor(f.fileName)}"); font-weight: ${f.weight}; font-display: block; }`
+        `@font-face { font-family: "${f.family}"; src: url("${f.url}") format("${formatFor(f.fileName)}"); font-weight: ${f.weight}; font-style: normal; font-display: block; }`
     )
     .join('\n');
   document.head.appendChild(style);

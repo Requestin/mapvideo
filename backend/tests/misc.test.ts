@@ -17,14 +17,14 @@ describe('GET /api/health', () => {
 describe('GET /api/fonts', () => {
   const app = createApp();
 
-  it('401 without auth', async () => {
+  it('200 without auth', async () => {
     const res = await request(app).get('/api/fonts');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.fonts)).toBe(true);
   });
 
   it('200 returns the on-disk font list with family/fileName/url', async () => {
-    const { authHeaders } = await loginAsAdmin(app);
-    const res = await request(app).get('/api/fonts').set(authHeaders);
+    const res = await request(app).get('/api/fonts');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.fonts)).toBe(true);
     expect(res.body.fonts.length).toBeGreaterThan(0);
@@ -41,8 +41,7 @@ describe('GET /api/fonts', () => {
   });
 
   it('parses common weight suffixes from filenames', async () => {
-    const { authHeaders } = await loginAsAdmin(app);
-    const res = await request(app).get('/api/fonts').set(authHeaders);
+    const res = await request(app).get('/api/fonts');
     type Font = { fileName: string; weight: number };
     const byFile = (name: string): Font | undefined =>
       (res.body.fonts as Font[]).find((f) => f.fileName === name);

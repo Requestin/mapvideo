@@ -5,22 +5,24 @@ export type MapTheme = 'dark' | 'light';
 // Martin exposes zoom-adaptive function sources (see db/sql/01-zoom-adaptive-tiles.sql).
 // This keeps low zoom levels lightweight by simplifying geometry and filtering
 // smaller classes server-side.
+const TILE_STYLE_REV = '20260424-greenfix';
+
 const tileSources: StyleSpecification['sources'] = {
   landuse: {
     type: 'vector',
-    tiles: ['/tiles/mv_landuse/{z}/{x}/{y}'],
+    tiles: [`/tiles/mv_landuse/{z}/{x}/{y}?v=${TILE_STYLE_REV}`],
     minzoom: 0,
     maxzoom: 18,
   },
   water: {
     type: 'vector',
-    tiles: ['/tiles/mv_water/{z}/{x}/{y}'],
+    tiles: [`/tiles/mv_water/{z}/{x}/{y}?v=${TILE_STYLE_REV}`],
     minzoom: 0,
     maxzoom: 18,
   },
   roads: {
     type: 'vector',
-    tiles: ['/tiles/mv_roads/{z}/{x}/{y}'],
+    tiles: [`/tiles/mv_roads/{z}/{x}/{y}?v=${TILE_STYLE_REV}`],
     minzoom: 0,
     maxzoom: 18,
   },
@@ -30,20 +32,40 @@ export const DARK_MAP_STYLE: StyleSpecification = {
   version: 8,
   sources: tileSources,
   layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#0d0d0d' } },
+    { id: 'bg', type: 'background', paint: { 'background-color': '#3a4658' } },
     {
-      id: 'landuse',
+      id: 'landuse-other',
       type: 'fill',
       source: 'landuse',
       'source-layer': 'landuse',
-      paint: { 'fill-color': '#141414' },
+      filter: ['==', ['get', 'lu_class'], 'other'],
+      paint: { 'fill-color': '#445267' },
+    },
+    {
+      id: 'landuse-urban',
+      type: 'fill',
+      source: 'landuse',
+      'source-layer': 'landuse',
+      filter: ['==', ['get', 'lu_class'], 'urban'],
+      paint: { 'fill-color': '#4f5d73' },
+    },
+    {
+      id: 'landuse-green',
+      type: 'fill',
+      source: 'landuse',
+      'source-layer': 'landuse',
+      filter: ['==', ['get', 'lu_class'], 'green'],
+      paint: {
+        'fill-color': '#2e5a4d',
+        'fill-opacity': 0.96,
+      },
     },
     {
       id: 'water',
       type: 'fill',
       source: 'water',
       'source-layer': 'water',
-      paint: { 'fill-color': '#0f2030' },
+      paint: { 'fill-color': '#0b3f86' },
     },
     {
       id: 'roads-major',
@@ -53,8 +75,8 @@ export const DARK_MAP_STYLE: StyleSpecification = {
       minzoom: 0,
       filter: ['match', ['get', 'highway'], ['motorway', 'trunk', 'primary'], true, false],
       paint: {
-        'line-color': '#2b3d5c',
-        'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.5, 10, 2.5],
+        'line-color': '#aebfda',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.6, 10, 2.8],
       },
     },
     {
@@ -64,7 +86,7 @@ export const DARK_MAP_STYLE: StyleSpecification = {
       'source-layer': 'roads',
       minzoom: 6,
       filter: ['match', ['get', 'highway'], ['secondary', 'tertiary', 'residential'], true, false],
-      paint: { 'line-color': '#1b2a40', 'line-width': 1 },
+      paint: { 'line-color': '#8197b8', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.8, 12, 1.4] },
     },
   ],
 };

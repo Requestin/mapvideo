@@ -46,9 +46,11 @@ async function waitForMapIdle(map: {
 function InstallWindowApiV2({
   breathingStrength,
   breathingReferenceZoom,
+  requiredFonts,
 }: {
   breathingStrength: number;
   breathingReferenceZoom: number;
+  requiredFonts: Array<{ family: string; weight: number }>;
 }): null {
   const { mapRef, pixiRef } = useEditorMap();
   const installed = useRef(false);
@@ -69,11 +71,15 @@ function InstallWindowApiV2({
         __applyRenderTimeSec?: (s: number) => void;
         __applyRenderTimeSecV2?: (s: number) => void;
         mapReadyV2?: boolean;
+        mapReadyV2Error?: string;
+        __refreshLabelRenders?: () => void;
       };
 
       const applyRenderTime = (sec: number): void => {
         window.__RENDER_TIME_MS__ = sec * 1000;
-        gsap.globalTimeline.time(sec);
+        // Render V2 is frame-driven by backend (targetSec per frame). Keep GSAP
+        // on the exact same clock; real-time ticker progression causes jitter.
+        gsap.globalTimeline.time(sec, false);
         map.setZoom(computeBreathingZoom(breathingReferenceZoom, breathingStrength, sec));
         map.triggerRepaint();
         requestAnimationFrame(() => {
@@ -87,21 +93,48 @@ function InstallWindowApiV2({
       // Keep compatibility for old tooling expecting legacy name.
       w.__applyRenderTimeSec = applyRenderTime;
 
-      void loadAppFonts()
-        .catch(() => loadAppFonts().catch(() => undefined))
-        .then(() => document.fonts.ready)
-        .then(async () => {
+      void (async () => {
+        try {
+          // Freeze GSAP real-time clock in capture mode; we control playhead
+          // manually via applyRenderTime(sec) for deterministic animation.
+          gsap.ticker.sleep();
+          gsap.globalTimeline.pause(0);
+          w.mapReadyV2 = false;
+          delete w.mapReadyV2Error;
+          await loadAppFonts();
+          await document.fonts.ready;
+          if (typeof document !== 'undefined' && 'fonts' in document && requiredFonts.length > 0) {
+            await Promise.all(
+              requiredFonts.map((f) => document.fonts.load(`${f.weight} 16px "${f.family}"`))
+            );
+            await document.fonts.ready;
+            for (const f of requiredFonts) {
+              if (!document.fonts.check(`${f.weight} 16px "${f.family}"`)) {
+                throw new Error(`Required font not available: ${f.family} (${f.weight})`);
+              }
+            }
+            if (typeof w.__refreshLabelRenders === 'function') {
+              w.__refreshLabelRenders();
+              await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            }
+          }
           await waitForMapIdle(map);
           applyRenderTime(0);
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-        })
-        .finally(() => {
           w.mapReadyV2 = true;
-        });
+        } catch (err) {
+          w.mapReadyV2Error = err instanceof Error ? err.message : String(err);
+          // eslint-disable-next-line no-console
+          console.error('[render-page-v2] fonts/map init failed', err);
+        }
+      })();
     }, 16);
 
-    return () => clearInterval(id);
-  }, [mapRef, pixiRef, breathingReferenceZoom, breathingStrength]);
+    return () => {
+      clearInterval(id);
+      gsap.ticker.wake();
+    };
+  }, [mapRef, pixiRef, breathingReferenceZoom, breathingStrength, requiredFonts]);
 
   return null;
 }
@@ -121,8 +154,28 @@ function resolveBreathingReferenceZoom(state: MapStateV1): number {
   return normalizeZoomForRenderV2(source, resolvePreviewWidthPx(state));
 }
 
+function collectRequiredLabelFonts(state: MapStateV1): Array<{ family: string; weight: number }> {
+  const out = new Map<string, { family: string; weight: number }>();
+  for (const el of state.elements) {
+    if (!el || typeof el !== 'object') continue;
+    const e = el as {
+      kind?: unknown;
+      settings?: { fontFamily?: unknown; fontWeight?: unknown };
+    };
+    if (e.kind !== 'label') continue;
+    const family = typeof e.settings?.fontFamily === 'string' ? e.settings.fontFamily.trim() : '';
+    const weightRaw = e.settings?.fontWeight;
+    const weight = typeof weightRaw === 'number' && Number.isFinite(weightRaw) ? weightRaw : 400;
+    if (!family) continue;
+    const key = `${family}|${weight}`;
+    if (!out.has(key)) out.set(key, { family, weight });
+  }
+  return [...out.values()];
+}
+
 function RenderInnerV2({ state }: { state: MapStateV1 }): JSX.Element {
   const hitRegistry = useMemo<HitRegistry>(() => ({ targets: [] }), []);
+  const requiredFonts = useMemo(() => collectRequiredLabelFonts(state), [state]);
   if (typeof window !== 'undefined') {
     window.__RENDER_CAPTURE__ = true;
   }
@@ -140,6 +193,7 @@ function RenderInnerV2({ state }: { state: MapStateV1 }): JSX.Element {
       <InstallWindowApiV2
         breathingStrength={Math.max(0, state.video.cameraBreathing)}
         breathingReferenceZoom={resolveBreathingReferenceZoom(state)}
+        requiredFonts={requiredFonts}
       />
     </>
   );

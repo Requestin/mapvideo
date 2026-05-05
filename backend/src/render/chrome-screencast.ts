@@ -39,6 +39,10 @@ export async function capturePageToVideoViaScreencast(params: CaptureParams): Pr
   const ffmpegDone = new Promise<void>((resolve, reject) => {
     ffmpeg.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg ${code}`))));
   });
+  // Prevent process crash when ffmpeg exits early and pipe writes hit EPIPE.
+  ffmpeg.stdin?.on('error', (err) => {
+    logger.warn({ err }, 'ffmpeg stdin error');
+  });
 
   const cdp = await params.page.target().createCDPSession();
   await cdp.send('Page.enable');

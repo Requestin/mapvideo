@@ -101,6 +101,13 @@ export interface PixiLayerProps {
   routePreviewCursorRef?: MutableRefObject<{ x: number; y: number } | null>;
 }
 
+declare global {
+  interface Window {
+    /** Render-page hook: rebuild only PIXI label text objects after fonts load. */
+    __refreshLabelRenders?: () => void;
+  }
+}
+
 // <PixiLayer> is a headless component — it renders no DOM. It subscribes
 // to editor state and the shared Pixi application, creating/updating
 // PIXI.Containers to match the state array. Position sync is driven by
@@ -108,7 +115,10 @@ export interface PixiLayerProps {
 // during inertial pan; additionally a Pixi ticker drives route/animation
 // redraws so pulse + dash + transport icons keep moving when the map is
 // still.
-export function PixiLayer({ hitRegistry, routePreviewCursorRef }: PixiLayerProps): null {
+export function PixiLayer({
+  hitRegistry,
+  routePreviewCursorRef,
+}: PixiLayerProps): null {
   const { elements, hoveredElementId, routeBuildMode, videoSettings } = useEditorState();
   const { mapRef, pixiRef, onFlash } = useEditorMap();
 
@@ -403,7 +413,49 @@ export function PixiLayer({ hitRegistry, routePreviewCursorRef }: PixiLayerProps
     return off;
   }, [onFlash]);
 
-  // === 6. Teardown: on unmount, destroy all Pixi records. We leave the
+  // === 6. Optional render-page hook: when fonts are loaded after initial
+  // label creation, rebuild only label PIXI.Text instances without remounting
+  // the whole layer (keeps route/breathing animation wiring intact).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const refresh = (): void => {
+      const pixi = pixiRef.current;
+      if (!pixi?.stage) return;
+      const stage = pixi.stage;
+      const records = recordsRef.current;
+      for (const [id, rec] of records) {
+        if (rec.kind !== 'label') continue;
+        const oldContainer = rec.render.container;
+        const oldIndex = stage.getChildIndex(oldContainer);
+        stage.removeChild(oldContainer);
+        rec.render.dispose();
+        const render = createLabel(rec.originalText, rec.settings);
+        stage.addChildAt(render.container, Math.min(oldIndex, stage.children.length));
+        records.set(id, { ...rec, render });
+      }
+      syncPositions(
+        records,
+        elementsRef.current,
+        mapRef.current,
+        hitRegistry,
+        hoverRingRef.current,
+        hoveredIdRef.current,
+        routePreviewGraphicsRef.current,
+        routeBuildModeRef.current,
+        routePreviewCursorRef?.current ?? null,
+        videoSettings.duration,
+        getAnimationTimeMs()
+      );
+    };
+    window.__refreshLabelRenders = refresh;
+    return () => {
+      if (window.__refreshLabelRenders === refresh) {
+        delete window.__refreshLabelRenders;
+      }
+    };
+  }, [pixiRef, mapRef, hitRegistry, routePreviewCursorRef, videoSettings.duration]);
+
+  // === 7. Teardown: on unmount, destroy all Pixi records. We leave the
   //       stage itself alone — EditorMap owns it. Под StrictMode сосед
   //       EditorMap обычно уже сделал `pixi.destroy(true, {children:true})`
   //       к этому моменту, поэтому сами контейнеры могут быть уже destroyed.

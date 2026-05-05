@@ -1,7 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { Router, type Request, type Response } from 'express';
-import { requireAuth } from '../middleware/require-auth';
 import { logger } from '../utils/logger';
 import { resolveAssetsDir } from '../utils/resolve-assets';
 
@@ -90,7 +89,11 @@ const cache: FontEntry[] = (() => {
   }
 })();
 
-router.get('/', requireAuth, (_req: Request, res: Response) => {
+// Public: the actual font binaries are already served from `/assets/fonts/*`,
+// so exposing the directory metadata does not widen access in practice. This
+// also lets headless render pages preload the exact same font set as the
+// authenticated editor preview without requiring a user session cookie.
+router.get('/', (_req: Request, res: Response) => {
   res.json({ fonts: cache });
 });
 

@@ -27,9 +27,19 @@ export async function renderBaseVideoV2(params: RenderBaseV2Params): Promise<voi
   const url = `${FRONTEND_BASE}/render-page-v2?job_id=${encodeURIComponent(params.jobId)}&render_token=${encodeURIComponent(renderToken)}`;
   await page.goto(url, { waitUntil: 'load', timeout: 120000 });
   await page.waitForFunction(
-    () => (globalThis as unknown as { mapReadyV2?: boolean }).mapReadyV2 === true,
+    () => {
+      const w = globalThis as unknown as { mapReadyV2?: boolean; mapReadyV2Error?: string };
+      return w.mapReadyV2 === true || typeof w.mapReadyV2Error === 'string';
+    },
     { timeout: 120000 }
   );
+  const initError = await page.evaluate(() => {
+    const w = globalThis as unknown as { mapReadyV2Error?: string };
+    return w.mapReadyV2Error ?? null;
+  });
+  if (initError) {
+    throw new Error(`Render page init failed: ${initError}`);
+  }
 
   const outArgs = buildFfmpegOutputArgs(params.format, params.fps, `${params.width}x${params.height}`);
   await capturePageToVideoViaScreencast({
