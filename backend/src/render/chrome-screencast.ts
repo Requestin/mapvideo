@@ -16,7 +16,13 @@ interface CaptureParams {
   onProgress: ProgressFn;
 }
 
+const DEFAULT_WARMUP_FRAMES = 8;
+
 export async function capturePageToVideoViaScreencast(params: CaptureParams): Promise<void> {
+  const warmupFrames = Math.max(
+    0,
+    Number.parseInt(process.env.RENDER_SCREENCAST_WARMUP_FRAMES ?? '', 10) || DEFAULT_WARMUP_FRAMES
+  );
   const ffmpeg = spawn(
     'ffmpeg',
     [
@@ -56,6 +62,8 @@ export async function capturePageToVideoViaScreencast(params: CaptureParams): Pr
   );
 
   let frameIndex = 0;
+  let warmupSeen = 0;
+  let captureStarted = warmupFrames === 0;
   let done = false;
   let settle: ((value: void | PromiseLike<void>) => void) | null = null;
   let fail: ((reason?: unknown) => void) | null = null;
@@ -82,6 +90,27 @@ export async function capturePageToVideoViaScreencast(params: CaptureParams): Pr
       chain = chain.then(async () => {
         if (done) {
           await cdp.send('Page.screencastFrameAck', { sessionId: evt.sessionId });
+          return;
+        }
+        if (!captureStarted) {
+          warmupSeen += 1;
+          await cdp.send('Page.screencastFrameAck', { sessionId: evt.sessionId });
+          if (warmupSeen >= warmupFrames) {
+            // Keep warm-up at t=0 to preserve first visible frame parity
+            // with preview; start encoding only after compositor settles.
+            await params.page.evaluate(
+              (sec, fnName) => {
+                const w = globalThis as unknown as Record<
+                  string,
+                  ((s: number) => void) | undefined
+                >;
+                w[fnName]?.(sec);
+              },
+              0,
+              params.applyTimeFunction
+            );
+            captureStarted = true;
+          }
           return;
         }
         const img = Buffer.from(evt.data, 'base64');
