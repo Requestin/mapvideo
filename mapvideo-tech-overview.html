@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapvideo — техническое описание проекта</title>
+<style>
+:root{
+  --bg:#0d0d0d; --panel:#1a1a1a; --panel2:#222222; --input:#2a2a2a; --hover:#333333;
+  --text:#f0f0f0; --text2:#9a9a9a; --accent:#3d8bff; --accent2:#5a9fff;
+  --danger:#ff5555; --success:#46c46a; --warn:#e0a83a; --border:#333333; --border2:#444444;
+  --nav-w:300px; --maxw:980px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:16px; line-height:1.65;
+}
+a{color:var(--accent); text-decoration:none}
+a:hover{color:var(--accent2); text-decoration:underline}
+code{
+  font-family:"SF Mono",ui-monospace,"Cascadia Code",Consolas,"Roboto Mono",monospace;
+  background:var(--input); color:#cfe1ff; padding:.1em .4em; border-radius:4px; font-size:.88em;
+}
+pre{
+  background:#141414; border:1px solid var(--border); border-radius:8px; padding:14px 16px;
+  overflow:auto; font-size:.86em; line-height:1.5;
+}
+pre code{background:none; color:#d4d4d4; padding:0}
+
+/* layout */
+.layout{display:flex; min-height:100vh}
+nav.toc{
+  width:var(--nav-w); flex:0 0 var(--nav-w); position:sticky; top:0; align-self:flex-start;
+  height:100vh; overflow-y:auto; background:var(--panel); border-right:1px solid var(--border);
+  padding:20px 12px 60px;
+}
+nav.toc .brand{font-size:1.25rem; font-weight:700; padding:6px 12px 4px; letter-spacing:.3px}
+nav.toc .brand span{color:var(--accent)}
+nav.toc .sub{color:var(--text2); font-size:.78rem; padding:0 12px 14px; border-bottom:1px solid var(--border); margin-bottom:10px}
+nav.toc a{
+  display:block; color:var(--text2); padding:6px 12px; border-radius:6px; font-size:.9rem;
+  border-left:3px solid transparent; line-height:1.35;
+}
+nav.toc a:hover{background:var(--hover); color:var(--text); text-decoration:none}
+nav.toc a.active{color:var(--text); background:var(--panel2); border-left-color:var(--accent); font-weight:600}
+nav.toc .grp{font-size:.7rem; text-transform:uppercase; letter-spacing:.1em; color:#666; padding:14px 12px 4px}
+
+main{flex:1 1 auto; min-width:0; padding:0 36px 120px}
+.wrap{max-width:var(--maxw); margin:0 auto}
+header.hero{padding:54px 0 26px; border-bottom:1px solid var(--border); margin-bottom:8px}
+header.hero h1{font-size:2.1rem; margin:0 0 8px}
+header.hero p{color:var(--text2); margin:0; font-size:1.05rem}
+
+section.section{padding:34px 0 8px; scroll-margin-top:14px; border-bottom:1px solid var(--border)}
+section.section>h2{font-size:1.55rem; margin:0 0 6px; padding-bottom:8px; display:flex; align-items:center; gap:10px}
+section.section>h2 .num{color:var(--accent); font-size:1.05rem; font-weight:700; background:var(--panel2); border:1px solid var(--border2); border-radius:8px; padding:2px 10px}
+h3{font-size:1.15rem; margin:24px 0 8px; color:#fff}
+h4{font-size:1rem; margin:16px 0 6px; color:#dfe7f5}
+
+.lead{color:#cdd6e4; font-size:1.02rem}
+ul,ol{padding-left:22px}
+li{margin:4px 0}
+.tag{display:inline-block; background:var(--panel2); border:1px solid var(--border2); color:#cfe1ff;
+  border-radius:20px; padding:2px 10px; font-size:.8rem; margin:2px 4px 2px 0; white-space:nowrap}
+.tag b{color:#fff}
+
+/* callouts */
+.box{border-radius:10px; padding:14px 16px; margin:14px 0; border:1px solid var(--border); background:var(--panel)}
+.box .t{font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:8px}
+.box.what{border-left:4px solid var(--accent)}
+.box.why{border-left:4px solid var(--success)}
+.box.how{border-left:4px solid #8a7bff}
+.box.note{border-left:4px solid var(--accent); background:#11233f22}
+.box.warn{border-left:4px solid var(--warn); background:#3a2c0d33}
+.box.good{border-left:4px solid var(--success); background:#10381c2e}
+
+/* alternatives grid */
+.alt{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0}
+.alt .col{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px 14px}
+.alt .col.pros{border-top:3px solid var(--success)}
+.alt .col.cons{border-top:3px solid var(--danger)}
+.alt .col h4{margin:0 0 6px}
+.alt ul{margin:0; padding-left:18px}
+@media(max-width:760px){.alt{grid-template-columns:1fr}}
+
+/* tables */
+table{border-collapse:collapse; width:100%; margin:14px 0; font-size:.92rem}
+th,td{border:1px solid var(--border2); padding:8px 10px; text-align:left; vertical-align:top}
+th{background:var(--panel2); color:#fff}
+tr:nth-child(even) td{background:#161616}
+
+/* Q&A */
+.qa{margin:8px 0; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--panel)}
+.qa>summary{cursor:pointer; padding:10px 14px; font-weight:600; list-style:none; display:flex; gap:10px; align-items:flex-start}
+.qa>summary::-webkit-details-marker{display:none}
+.qa>summary:before{content:"В:"; color:var(--accent); font-weight:800; flex:0 0 auto}
+.qa>summary:hover{background:var(--hover)}
+.qa[open]>summary{border-bottom:1px solid var(--border); background:var(--panel2)}
+.qa .ans{padding:10px 14px 12px 36px; color:#d7dee9}
+.qa .ans:before{content:"О: "; color:var(--success); font-weight:800; margin-left:-22px}
+.qa-wrap{margin:16px 0; border-left:3px solid var(--border2); padding-left:14px}
+.qa-wrap .qhead{font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:#777; margin-bottom:8px}
+
+.toplink{display:inline-block; margin:14px 0 2px; font-size:.85rem; color:var(--text2)}
+.toplink:hover{color:var(--accent)}
+
+/* diagram */
+.diagram-card{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px; margin:16px 0}
+.diagram-toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:4px 6px 10px}
+.diagram-toolbar button{
+  background:var(--panel2); border:1px solid var(--border2); color:var(--text); border-radius:7px;
+  padding:5px 12px; cursor:pointer; font-size:.85rem}
+.diagram-toolbar button:hover{background:var(--hover); border-color:var(--accent)}
+.diagram-toolbar .hint{color:var(--text2); font-size:.8rem; margin-left:auto}
+.diagram-viewport{position:relative; width:100%; height:560px; overflow:hidden; background:
+  radial-gradient(circle at 1px 1px,#222 1px,transparent 0) 0 0/26px 26px,#101010;
+  border:1px solid var(--border); border-radius:8px; cursor:grab}
+.diagram-viewport.grabbing{cursor:grabbing}
+.diagram-viewport svg{position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform}
+.node rect{rx:9; stroke-width:1.5}
+.node text{fill:#f3f3f3; font-size:13px; font-weight:600; pointer-events:none}
+.node .sub{fill:#aab4c4; font-size:10.5px; font-weight:500}
+.node{cursor:pointer}
+.node:hover rect{stroke:#fff !important}
+.node.dim{opacity:.28}
+.edge path{fill:none; stroke:#56627a; stroke-width:1.6}
+.edge text{fill:#9fb0c9; font-size:10.5px}
+.edge.dim{opacity:.12}
+.edge.hot path{stroke:var(--accent); stroke-width:2.4}
+.edge.hot text{fill:#cfe1ff}
+.diagram-desc{margin-top:10px; padding:12px 14px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; min-height:52px; font-size:.92rem}
+.diagram-desc b{color:#fff}
+.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:.8rem; color:var(--text2); padding:8px 6px 0}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.legend i{width:14px; height:14px; border-radius:4px; display:inline-block}
+
+/* back to top */
+#totop{position:fixed; right:22px; bottom:22px; background:var(--accent); color:#fff; border:none;
+  width:46px; height:46px; border-radius:50%; font-size:1.2rem; cursor:pointer; opacity:0; pointer-events:none;
+  transition:opacity .2s; box-shadow:0 4px 16px #0008; z-index:50}
+#totop.show{opacity:.9; pointer-events:auto}
+#totop:hover{opacity:1}
+
+.mini{color:var(--text2); font-size:.85rem}
+.kbd{background:var(--input); border:1px solid var(--border2); border-bottom-width:2px; border-radius:5px; padding:1px 6px; font-size:.82em}
+.pill{font-size:.72rem; padding:1px 8px; border-radius:20px; font-weight:700}
+.pill.ok{background:#10381c; color:#7be2a0; border:1px solid #1d6e3a}
+.pill.no{background:#3a1414; color:#ff9a9a; border:1px solid #7a2727}
+.pill.part{background:#3a2c0d; color:#ffd27a; border:1px solid #7a5a1d}
+hr.soft{border:none; border-top:1px solid var(--border); margin:18px 0}
+@media(max-width:900px){
+  nav.toc{display:none}
+  main{padding:0 16px 100px}
+}
+</style>
+</head>
+<body>
+<button id="totop" title="Наверх, к оглавлению">↑</button>
+<div class="layout" id="top">
+<nav class="toc">
+  <div class="brand">Map<span>video</span></div>
+  <div class="sub">Техническое описание проекта · шпаргалка для защиты</div>
+  <a href="#resume">Резюме проекта</a>
+  <a href="#arch">Карта архитектуры (интерактивная)</a>
+  <a href="#stack">Технологический стек</a>
+  <div class="grp">Приложение</div>
+  <a href="#frontend">Фронтенд (браузер)</a>
+  <a href="#editor">Редактор карты: функционал</a>
+  <a href="#backend">Бэкенд (сервер, API)</a>
+  <a href="#render">Конвейер рендера видео</a>
+  <div class="grp">Данные и карта</div>
+  <a href="#db">База данных</a>
+  <a href="#tiles">Тайлы карты (Martin)</a>
+  <a href="#routing">Маршрутизация (OSRM)</a>
+  <a href="#geocoding">Геокодирование (Photon)</a>
+  <a href="#osm">Данные OpenStreetMap</a>
+  <div class="grp">Инфраструктура</div>
+  <a href="#infra">Docker и сервисы</a>
+  <a href="#nginx">Nginx, SSL, домен</a>
+  <a href="#security">Безопасность</a>
+  <a href="#assets">Ассеты (иконки, шрифты)</a>
+  <a href="#testing">Тестирование</a>
+  <a href="#performance">Производительность</a>
+  <div class="grp">Для защиты</div>
+  <a href="#decisions">Журнал ключевых решений</a>
+  <a href="#risks">Ограничения и риски</a>
+  <a href="#faq">Вопросы на засыпку</a>
+  <a href="#glossary">Глоссарий терминов</a>
+</nav>
+<main>
+<div class="wrap">
+  <header class="hero">
+    <h1>Mapvideo — техническое описание проекта</h1>
+    <p>Полный разбор стека, архитектуры и инженерных решений. Каждый раздел: <b>что</b>, <b>зачем</b>, <b>как сделано</b>, <b>альтернативы</b> и <b>вероятные вопросы с ответами</b>.</p>
+  </header>
+
+  <section class="section" id="resume"><h2><span class="num">1</span>Резюме проекта</h2><p class="lead">Mapvideo — это веб-сервис для редакции телеканала. Он позволяет журналисту прямо в браузере собрать анимированную карту для новостного сюжета (точки городов, подписи, маршруты, эффекты вроде «взрыв» или «пожар») и скачать готовый видеофайл <b>MP4</b>, который монтажёр вставляет в эфир.</p>
+
+<div class="box what"><div class="t">Что это простыми словами</div>
+Конструктор анимированных карт «как в новостях»: пользователь двигает камеру по карте, ставит метки и анимации, видит «живое» превью в формате будущего видео (строго 16:9), нажимает «Сохранить видео» — и через некоторое время получает готовый ролик 1920×1080.</div>
+
+<h3>Ключевая ценность</h3>
+<ul>
+  <li><b>Карта без чужих логотипов и водяных знаков.</b> Используются собственные данные OpenStreetMap и свой тайл-сервер — на видео в эфире нет логотипов Google/Yandex/Mapbox.</li>
+  <li><b>«Что вижу — то и получу».</b> Превью в редакторе совпадает с финальным кадром видео: те же анимации, шрифты, положение камеры.</li>
+  <li><b>Рендер на сервере.</b> Видео считается на сервере, поэтому процесс не прерывается, даже если пользователь закрыл вкладку.</li>
+</ul>
+
+<h3>Главные факты для быстрого ответа</h3>
+<table>
+  <tr><th>Параметр</th><th>Значение</th></tr>
+  <tr><td>Тип</td><td>Внутренний веб-сервис (SaaS-подобный), доступ по логину</td></tr>
+  <tr><td>Пользователи</td><td>Сотрудники редакции (роль <code>user</code>) + один <code>admin</code></td></tr>
+  <tr><td>Результат</td><td>Видео 1920×1080, 25 или 50 кадров/с, формат MP4</td></tr>
+  <tr><td>Фронтенд</td><td>React 18 + TypeScript + Vite, карта MapLibre, анимации PixiJS + GSAP</td></tr>
+  <tr><td>Бэкенд</td><td>Node.js + Express 5 + TypeScript; рендер через Puppeteer + FFmpeg</td></tr>
+  <tr><td>Данные</td><td>PostgreSQL 16 + PostGIS, тайлы Martin, маршруты OSRM, геокодер Photon</td></tr>
+  <tr><td>Инфраструктура</td><td>Docker Compose (5 сервисов) за хостовым Nginx с HTTPS (Let's Encrypt)</td></tr>
+  <tr><td>Адрес</td><td><code>https://mapvideo.gyhyry.com</code> (недавно переехал с домена <code>.ru</code>)</td></tr>
+</table>
+
+<div class="box note"><div class="t">Контекст</div>Это рабочий тестовый проект на одном сервере (Ubuntu). Разработка велась строго по спецификации <code>SPEC.md</code> и пофазным заданиям <code>task1…task18</code>; продукт прошёл 18 фаз (базовый функционал + волны UX-багфиксов + ревью качества кода).</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="arch"><h2><span class="num">2</span>Карта архитектуры (интерактивная)</h2><p class="lead">Схема показывает, из каких частей состоит сервис и как они общаются. <b>Кликните по блоку</b> — подсветятся связанные стрелки и появится пояснение. Колесо мыши — масштаб, перетаскивание — сдвиг.</p>
+
+<div class="diagram-card">
+  <div class="diagram-toolbar">
+    <button id="arch-in">+ приблизить</button>
+    <button id="arch-out">− отдалить</button>
+    <button id="arch-reset">⟲ сброс</button>
+    <span class="hint">наведите и кликните по блоку для деталей</span>
+  </div>
+  <div class="diagram-viewport" id="arch-vp">
+    <svg id="arch-svg" width="1180" height="720" viewBox="0 0 1180 720" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#7d8aa3"/>
+        </marker>
+      </defs>
+
+      <!-- edges first (under nodes) -->
+      <g class="edge" data-from="client" data-to="nginx"><path d="M200,332 L253,332" marker-end="url(#arrow)"/><text x="205" y="324">HTTPS</text></g>
+      <g class="edge" data-from="nginx" data-to="frontend"><path d="M415,324 L468,246" marker-end="url(#arrow)"/><text x="420" y="280">/ (SPA)</text></g>
+      <g class="edge" data-from="nginx" data-to="backend"><path d="M415,342 L468,388" marker-end="url(#arrow)"/><text x="416" y="372">/api/*</text></g>
+      <g class="edge" data-from="nginx" data-to="martin"><path d="M415,316 L698,152" marker-end="url(#arrow)"/><text x="500" y="214">/tiles/* + кэш</text></g>
+      <g class="edge" data-from="backend" data-to="postgres"><path d="M640,386 L698,334" marker-end="url(#arrow)"/><text x="646" y="352">SQL</text></g>
+      <g class="edge" data-from="backend" data-to="osrm"><path d="M640,402 L698,496" marker-end="url(#arrow)"/><text x="612" y="456">маршруты</text></g>
+      <g class="edge" data-from="backend" data-to="photon"><path d="M640,396 L938,406" marker-end="url(#arrow)"/><text x="742" y="392">геокод (внешний)</text></g>
+      <g class="edge" data-from="martin" data-to="postgres"><path d="M788,178 L792,298" marker-end="url(#arrow)"/><text x="796" y="242">SQL-функции mv_*</text></g>
+      <g class="edge" data-from="backend" data-to="puppeteer"><path d="M512,420 L352,558" marker-end="url(#arrow)"/><text x="356" y="476">запускает рендер</text></g>
+      <g class="edge" data-from="puppeteer" data-to="frontend"><path d="M432,560 L474,256" marker-end="url(#arrow)"/><text x="300" y="350">открывает render-page</text></g>
+      <g class="edge" data-from="puppeteer" data-to="backend"><path d="M442,576 L516,422" marker-end="url(#arrow)"/><text x="476" y="512">/state + token</text></g>
+      <g class="edge" data-from="puppeteer" data-to="ffmpeg"><path d="M437,586 L468,586" marker-end="url(#arrow)"/><text x="392" y="612">JPEG-кадры (CDP)</text></g>
+      <g class="edge" data-from="ffmpeg" data-to="videos"><path d="M630,586 L698,614" marker-end="url(#arrow)"/><text x="632" y="600">MP4 + превью</text></g>
+
+      <!-- nodes -->
+      <g class="node" data-id="client" data-title="Браузер пользователя" data-desc="Редактор карты и страница логина. Браузер хранит httpOnly-cookie сессии и общается с сервером только по HTTPS через Nginx. Здесь же WebGL рисует карту и анимации.">
+        <rect x="40" y="300" width="160" height="64" rx="9" fill="#1e2a3a" stroke="#3d8bff"/>
+        <text x="56" y="328">Браузер</text><text class="sub" x="56" y="348">редактор и логин</text></g>
+      <g class="node" data-id="nginx" data-title="Host Nginx (обратный прокси + SSL)" data-desc="Единственная точка входа из интернета (порты 80/443). Терминирует HTTPS (сертификат Let's Encrypt), раздаёт SPA (/), проксирует API (/api/), ассеты (/assets/) и тайлы (/tiles/ с кэшем). Запущен на хосте, не в Docker.">
+        <rect x="255" y="300" width="160" height="64" rx="9" fill="#2a2320" stroke="#e0a83a"/>
+        <text x="271" y="328">Host Nginx</text><text class="sub" x="271" y="348">:443 HTTPS + кэш</text></g>
+      <g class="node" data-id="frontend" data-title="Frontend — React/Vite SPA" data-desc="Одностраничное приложение (React 18 + TypeScript). В проде это статические файлы, которые отдаёт лёгкий сервер serve на порту 3000. Содержит редактор и скрытые страницы рендера (render-page-v2), которые открывает Puppeteer.">
+        <rect x="470" y="210" width="170" height="60" rx="9" fill="#102a1e" stroke="#46c46a"/>
+        <text x="486" y="236">Frontend</text><text class="sub" x="486" y="255">React/Vite :3000</text></g>
+      <g class="node" data-id="backend" data-title="Backend — Express API" data-desc="Node.js + Express 5. Отвечает за логин/сессии, проекты, очередь рендера, проксирование геокодера и маршрутов, выдачу шрифтов. Внутри него же живёт рендер-воркер (Puppeteer + FFmpeg).">
+        <rect x="470" y="360" width="170" height="60" rx="9" fill="#1a2236" stroke="#3d8bff"/>
+        <text x="486" y="386">Backend</text><text class="sub" x="486" y="405">Express :3001</text></g>
+      <g class="node" data-id="martin" data-title="Martin — тайл-сервер" data-desc="Отдаёт векторные тайлы карты. Не публикует таблицы напрямую, а вызывает SQL-функции mv_roads/mv_water/mv_landuse, которые фильтруют и упрощают геометрию под уровень масштаба. Имеет собственный кэш.">
+        <rect x="700" y="120" width="170" height="58" rx="9" fill="#241a30" stroke="#8a7bff"/>
+        <text x="716" y="146">Martin</text><text class="sub" x="716" y="165">тайлы :3002</text></g>
+      <g class="node" data-id="postgres" data-title="PostgreSQL + PostGIS" data-desc="Главное хранилище. БД приложения: пользователи, сессии, задания рендера (render_jobs), render-токены. Отдельная БД gis: импортированные данные OpenStreetMap + геопространственные функции для тайлов.">
+        <rect x="700" y="300" width="185" height="62" rx="9" fill="#102330" stroke="#4a90c0"/>
+        <text x="716" y="327">PostgreSQL</text><text class="sub" x="716" y="347">+ PostGIS :5432</text></g>
+      <g class="node" data-id="osrm" data-title="OSRM — маршрутизация" data-desc="Строит маршруты по реальным дорогам (для значка «автомобиль» с галочкой «по дороге»). Бэкенд обращается к нему через прокси /api/route; при сбое отдаёт прямую линию (graceful fallback).">
+        <rect x="700" y="470" width="160" height="58" rx="9" fill="#241a30" stroke="#8a7bff"/>
+        <text x="716" y="496">OSRM</text><text class="sub" x="716" y="515">маршруты :5000</text></g>
+      <g class="node" data-id="photon" data-title="Photon — геокодер (внешний)" data-desc="Поиск места по названию (подсказки при добавлении точки). Используется публичный сервис photon.komoot.io через бэкенд-прокси /api/geocode — свой геокодер не поднимаем, чтобы не хранить ~75 ГБ индекса.">
+        <rect x="940" y="380" width="175" height="58" rx="9" fill="#2a1a1a" stroke="#c06a6a"/>
+        <text x="956" y="406">Photon</text><text class="sub" x="956" y="425">геокодер (внешний)</text></g>
+      <g class="node" data-id="puppeteer" data-title="Puppeteer — headless Chrome" data-desc="Управляемый из бэкенда «невидимый» браузер. Открывает страницу render-page-v2, грузит карту/анимации/шрифты и покадрово снимает картинку через протокол Chrome DevTools (CDP screencast).">
+        <rect x="255" y="560" width="185" height="58" rx="9" fill="#1a2236" stroke="#5a9fff"/>
+        <text x="271" y="586">Puppeteer</text><text class="sub" x="271" y="605">Chrome headless</text></g>
+      <g class="node" data-id="ffmpeg" data-title="FFmpeg — кодировщик видео" data-desc="Принимает поток JPEG-кадров от Puppeteer прямо в память (без сохранения PNG на диск) и собирает из них видео H.264/MP4. Второй проход накладывает гео-титр поверх базового видео.">
+        <rect x="470" y="560" width="160" height="58" rx="9" fill="#1a2236" stroke="#5a9fff"/>
+        <text x="486" y="586">FFmpeg</text><text class="sub" x="486" y="605">кадры → MP4</text></g>
+      <g class="node" data-id="videos" data-title="Хранилище видео" data-desc="Готовые ролики и миниатюры лежат на диске в /data/videos/{user_id}/. Метаданные и статус — в таблице render_jobs. Файлы старше 10 дней удаляет ночной cron.">
+        <rect x="700" y="600" width="185" height="56" rx="9" fill="#1e1e1e" stroke="#888"/>
+        <text x="716" y="625">/data/videos</text><text class="sub" x="716" y="644">готовые MP4</text></g>
+    </svg>
+  </div>
+  <div class="legend">
+    <span><i style="background:#3d8bff"></i> вход/приложение</span>
+    <span><i style="background:#46c46a"></i> фронтенд</span>
+    <span><i style="background:#8a7bff"></i> гео-сервисы</span>
+    <span><i style="background:#4a90c0"></i> база данных</span>
+    <span><i style="background:#c06a6a"></i> внешний сервис</span>
+  </div>
+  <div class="diagram-desc" id="arch-desc"></div>
+</div>
+
+<h3>Поток «нажал Сохранить видео» по шагам</h3>
+<ol>
+  <li>Браузер шлёт <code>POST /api/render</code> со «снимком» карты (snapshot) → бэкенд кладёт задачу в очередь (таблица <code>render_jobs</code>).</li>
+  <li>Рендер-воркер берёт задачу, запускает <b>Puppeteer</b> и открывает скрытую страницу <code>render-page-v2</code>.</li>
+  <li>Страница грузит карту, шрифты и анимации; сообщает «готово» (<code>mapReadyV2</code>).</li>
+  <li>Бэкенд через <b>CDP</b> покадрово снимает изображение и гонит JPEG-кадры в <b>FFmpeg</b>.</li>
+  <li>FFmpeg собирает MP4; при необходимости второй проход добавляет гео-титр.</li>
+  <li>Файл сохраняется в <code>/data/videos</code>, статус задачи → <code>done</code>, пользователь скачивает результат.</li>
+</ol>
+<a class="toplink" href="#top">↑ К оглавлению</a>
+<script>document.addEventListener('DOMContentLoaded',function(){if(window.initDiagram)window.initDiagram();});</script></section>
+  <section class="section" id="stack"><h2><span class="num">3</span>Технологический стек</h2><p class="lead">Стек подбирался под одно жёсткое требование: <b>видео должно считаться на сервере</b> (а не в браузере пользователя) и при этом выглядеть <b>точно как превью</b>. Отсюда вытекает большинство решений.</p>
+
+<h3>Сводная таблица</h3>
+<table>
+  <tr><th>Слой</th><th>Технология</th><th>Версия</th><th>Зачем именно она</th></tr>
+  <tr><td>UI-фреймворк</td><td>React + TypeScript</td><td>18.3</td><td>Стандарт индустрии, типобезопасность, много специалистов</td></tr>
+  <tr><td>Сборка фронта</td><td>Vite</td><td>5.4</td><td>Быстрая сборка и dev-сервер</td></tr>
+  <tr><td>Карта-подложка</td><td>MapLibre GL</td><td>4.7</td><td>Open-source, без логотипов и лицензионных платежей</td></tr>
+  <tr><td>Анимации поверх карты</td><td>PixiJS</td><td>7.4</td><td>Быстрый WebGL-рендер 2D-графики</td></tr>
+  <tr><td>Тайминги анимаций</td><td>GSAP</td><td>3.15</td><td>Точный контроль времени, можно «перемотать» покадрово</td></tr>
+  <tr><td>HTTP-клиент</td><td>axios</td><td>1.7</td><td>Удобные интерсепторы (автоподстановка CSRF-токена)</td></tr>
+  <tr><td>Сервер</td><td>Node.js + Express</td><td>20 / 5.2</td><td>Один язык (TS) на фронте и бэке; простой и зрелый веб-фреймворк</td></tr>
+  <tr><td>Рендер видео</td><td>Puppeteer + FFmpeg</td><td>23.11 / —</td><td>Единственный способ снять «настоящий» кадр SPA на сервере</td></tr>
+  <tr><td>База данных</td><td>PostgreSQL + PostGIS</td><td>16 / 3.4</td><td>Надёжная СУБД + геопространственные функции для тайлов</td></tr>
+  <tr><td>Тайл-сервер</td><td>Martin</td><td>0.14</td><td>Готовый сервер векторных тайлов прямо из PostGIS</td></tr>
+  <tr><td>Маршруты</td><td>OSRM</td><td>5.27</td><td>Быстрый расчёт маршрутов по дорогам OSM</td></tr>
+  <tr><td>Геокодер</td><td>Photon (внешний)</td><td>—</td><td>Поиск места по названию без своей инфраструктуры</td></tr>
+  <tr><td>Контейнеры</td><td>Docker Compose</td><td>—</td><td>Воспроизводимое окружение из 5 сервисов</td></tr>
+  <tr><td>Прокси + HTTPS</td><td>Nginx + Let's Encrypt</td><td>—</td><td>Уже есть на сервере; бесплатные авто-сертификаты</td></tr>
+</table>
+
+<h3>Зависимости — честно и по делу</h3>
+<p>Список намеренно <b>короткий</b>: на бэкенде 8 рантайм-зависимостей, на фронте 7. Это сознательный принцип проекта («минимум кода и абстракций»). Меньше зависимостей — меньше уязвимостей и проще поддержка.</p>
+<div class="alt">
+  <div class="col pros"><h4>Плюсы такого выбора</h4><ul>
+    <li>Один язык (TypeScript) на фронте и бэке — общая модель данных «снимка» карты.</li>
+    <li>Всё open-source, без лицензионных отчислений и чужих логотипов на видео.</li>
+    <li>Зрелые, широко используемые инструменты — легко нанять разработчика.</li>
+  </ul></div>
+  <div class="col cons"><h4>Минусы / расплата</h4><ul>
+    <li>Рендер через «настоящий браузер» (Puppeteer) ресурсоёмкий — это цена за точность «превью = видео».</li>
+    <li>MapLibre/PixiJS требуют WebGL, а WebGL на сервере капризен (см. раздел «Риски»).</li>
+    <li>Node.js однопоточный для тяжёлых задач — поэтому рендер вынесен в отдельные процессы (FFmpeg/Chrome).</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему не взяли готовый облачный конструктор карт?</summary><div class="ans">Требование — карта без чужих водяных знаков/логотипов и работа на собственном сервере (эфирный контент, контроль данных). Готовые сервисы (Mapbox, Google) ставят атрибуцию и берут плату за рендер.</div></details>
+  <details class="qa"><summary>Почему один язык на фронте и бэке — это важно?</summary><div class="ans">Модель «снимка» карты (snapshot) описана одним TypeScript-типом и переиспользуется и в браузере, и на сервере, и на странице рендера. Это исключает рассинхрон форматов данных.</div></details>
+  <details class="qa"><summary>Версии свежие?</summary><div class="ans">В целом да: React 18, Vite 5, PostgreSQL 16. PixiJS намеренно зафиксирован на 7.4 (не 8.x) — у 8-й версии асинхронная инициализация, которая ломала отлаженные сценарии анимаций. Это сознательный «pin», а не отставание.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="frontend"><h2><span class="num">4</span>Фронтенд (то, что работает в браузере)</h2><p class="lead">Фронтенд — это всё, что выполняется в браузере: редактор карты и скрытые «страницы рендера». Интересная особенность: <b>один и тот же код</b> рисует и интерактивное превью для пользователя, и кадры для итогового видео.</p>
+
+<h3>Три кита фронтенда</h3>
+<div class="box what"><div class="t">1. MapLibre GL — подложка карты</div>
+Рисует саму карту (дороги, вода, районы) по векторным тайлам. Это форк когда-то открытой версии Mapbox; полностью бесплатен (BSD-лицензия) и не навязывает логотипов. Работает через <b>WebGL</b> (рисование на видеокарте).</div>
+
+<div class="box what"><div class="t">2. PixiJS — слой анимаций поверх карты</div>
+Все метки, подписи, маршруты и эффекты (пульс, взрыв, огонь) рисуются <b>не</b> средствами карты, а отдельным WebGL-движком PixiJS, наложенным сверху. Так анимации не зависят от внутренностей карты и плавно двигаются.</div>
+
+<div class="box what"><div class="t">3. GSAP — «дирижёр» времени</div>
+Библиотека анимаций управляет тем, <i>в какой момент</i> что происходит. Ключевой трюк: при рендере видео GSAP можно «поставить на паузу» и вручную перематывать на нужную секунду — это даёт идеально воспроизводимую (детерминированную) анимацию покадрово.</div>
+
+<h3>Как слои совмещаются</h3>
+<p>PixiJS-слой «приклеен» к карте: на каждое событие перерисовки карты (<code>map.on('render')</code>) пересчитываются экранные координаты всех меток через <code>map.project(lng,lat)</code>. Поэтому при движении/зуме карты метки остаются на своих географических местах. Файл-сердце этого механизма — <code>frontend/src/pixi/pixi-layer.tsx</code>.</p>
+
+<h3>Страницы приложения</h3>
+<table>
+  <tr><th>Маршрут</th><th>Назначение</th></tr>
+  <tr><td><code>/login</code></td><td>Вход по логину/паролю</td></tr>
+  <tr><td><code>/</code></td><td>Главный редактор карты</td></tr>
+  <tr><td><code>/admin</code></td><td>Панель администратора (список/создание/удаление пользователей)</td></tr>
+  <tr><td><code>/render-page-v2</code></td><td>Скрытая страница, которую открывает Puppeteer для съёмки кадров видео</td></tr>
+  <tr><td><code>/geo-title-render-page</code></td><td>Скрытая страница для отрисовки гео-титра (второй проход рендера)</td></tr>
+</table>
+<p class="mini">Все «рабочие» страницы защищены: без сессии — редирект на <code>/login</code> (компонент <code>protected-route.tsx</code>), а <code>/admin</code> ещё и проверяет роль (<code>admin-route.tsx</code>).</p>
+
+<h3>Связь с сервером</h3>
+<p>Запросы идут через axios (<code>frontend/src/api/http.ts</code>) с <code>withCredentials:true</code>, чтобы браузер прикладывал cookie сессии. На «изменяющих» запросах (POST/PUT/DELETE) интерсептор автоматически копирует значение cookie <code>csrf_token</code> в заголовок <code>X-CSRF-Token</code> — это защита от CSRF (подробнее в разделе «Безопасность»).</p>
+
+<h3>Как production-сборка попадает к пользователю</h3>
+<p>Vite собирает статические файлы (<code>npm run build</code>), а в контейнере их раздаёт минималистичный сервер <code>serve</code> на порту 3000 (см. <code>frontend/Dockerfile</code>). Никакого Node-сервера для SSR нет — это чистая SPA.</p>
+
+<div class="alt">
+  <div class="col pros"><h4>Сильные стороны подхода</h4><ul>
+    <li>«Превью = видео»: один код рисует и то, и другое — нет расхождений.</li>
+    <li>WebGL-рендеринг быстрый, держит много анимаций одновременно.</li>
+    <li>Чёткое разделение: карта (MapLibre) отдельно, графика (PixiJS) отдельно.</li>
+  </ul></div>
+  <div class="col cons"><h4>Слабые стороны / риски</h4><ul>
+    <li>Жёсткая зависимость от WebGL: если на сервере «сломан» графический драйвер, рендер падает.</li>
+    <li>Два WebGL-контекста (карта + Pixi) — больше нагрузка на видеопамять.</li>
+    <li>SPA: первая загрузка тяжелее, чем у статичной страницы (для внутреннего инструмента некритично).</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Зачем PixiJS, если у MapLibre есть свои маркеры?</summary><div class="ans">Маркеры карты ограничены в анимации и привязаны к её циклу перерисовки. Нам нужны произвольные эффекты (пульсация, расходящиеся круги, секвенция огня, движение иконки по маршруту) с точным таймингом — это естественнее делать отдельным 2D-движком.</div></details>
+  <details class="qa"><summary>Почему MapLibre, а не Leaflet?</summary><div class="ans">Leaflet рисует растровые тайлы и DOM-маркеры — он не умеет плавно вращать/наклонять карту и плохо тянет анимации. MapLibre — векторный WebGL-рендер, более кинематографичная картинка и плавная камера.</div></details>
+  <details class="qa"><summary>Как одна страница рисует и превью, и видео?</summary><div class="ans">Страница рендера <code>render-page-v2</code> переиспользует те же компоненты редактора, но в «режиме захвата»: время анимаций задаётся не часами, а извне — по номеру кадра. Подробно в разделе «Конвейер рендера».</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="editor"><h2><span class="num">5</span>Редактор карты: функционал</h2><p class="lead">Редактор — главный экран. Слева превью карты в пропорции <b>строго 16:9</b> (как будущее видео), справа — панель настроек выбранного элемента, снизу — панель инструментов.</p>
+
+<h3>Что может пользователь</h3>
+<table>
+  <tr><th>Элемент</th><th>Что делает</th><th>Настройки</th></tr>
+  <tr><td><b>Точка</b></td><td>Метка города/места; добавляется через поиск по названию</td><td>Тип анимации: мигающая точка, взрыв, огонь, землетрясение; цвет, размер, прозрачность, скорость, окантовка</td></tr>
+  <tr><td><b>Подпись</b></td><td>Текст рядом с точкой; перетаскивается отдельно</td><td>Шрифт и начертание, размер, цвет, окантовка, «до запятой», «только заглавные»</td></tr>
+  <tr><td><b>Маршрут</b></td><td>Линия между двумя точками (или до произвольного места)</td><td>Прямая/пунктирная, цвет/толщина/прозрачность, стрелка, движущийся значок (авто/самолёт/вертолёт/корабль), «по дороге» через OSRM, «дуга» для авиа</td></tr>
+</table>
+
+<h3>Настройки видео</h3>
+<ul>
+  <li><b>Разрешение:</b> 1920×1080 (активно). 4K в интерфейсе показан, но отключён.</li>
+  <li><b>Кадры/с:</b> 25p или 50p (активны); прочие варианты заблокированы с подписью.</li>
+  <li><b>Формат:</b> MP4 (активен); MXF отключён.</li>
+  <li><b>Длительность:</b> 3–60 секунд (рендер-движок принимает 3–30 с при валидации).</li>
+  <li><b>Тема карты:</b> светлая / тёмная — меняется сразу в превью.</li>
+  <li><b>Дыхание камеры:</b> ползунок 0–100 — плавное циклическое приближение/отдаление для «живого» кадра.</li>
+</ul>
+
+<div class="box note"><div class="t">Важная деталь: «снимок» (snapshot)</div>
+Когда пользователь сохраняет видео, состояние редактора сериализуется в строгий JSON-объект (<code>serialize-map-state.ts</code>): центр и зум карты, тема, настройки видео, гео-титр, и массив всех элементов. Этот «снимок» — единственный источник правды для рендера. Бэкенд проверяет его по жёсткой схеме (<code>map-state.ts</code>): разрешено только 1920×1080, 25/50 fps, mp4, не более 500 элементов и т.д.</div>
+
+<h3>Нормализация камеры (тонкий, но важный момент)</h3>
+<p>Превью у пользователя меньше, чем итоговое видео (например, 960 px против 1920 px). Если просто «снять» камеру как есть, масштаб карты на видео не совпадёт с превью. Поэтому зум пересчитывается по формуле <code>zoom + log2(1920 / ширина_превью)</code> (<code>render-camera-normalization.ts</code>) — так на видео виден ровно тот же охват карты, что и в превью.</p>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему часть пресетов (4K, MXF, 30/60p) отключена?</summary><div class="ans">Сознательное сужение для стабильного v1: отлажены и гарантированы только 1080p / 25–50p / MP4. Отключённые опции видны (чтобы показать вектор развития), но заблокированы, чтобы пользователь не получил непроверенный результат.</div></details>
+  <details class="qa"><summary>Что если перетащить точку — маршрут «отвяжется»?</summary><div class="ans">Нет. Маршрут хранит ссылки на точки и перестраивается автоматически при их перемещении. При удалении точки связанные маршруты удаляются каскадно.</div></details>
+  <details class="qa"><summary>Откуда берутся названия при поиске точки?</summary><div class="ans">Из геокодера Photon (подсказки), но пользователь может отредактировать текст подписи вручную. Есть дедупликация одинаковых результатов на стороне бэкенда.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="backend"><h2><span class="num">6</span>Бэкенд (сервер и API)</h2><p class="lead">Бэкенд — сервер на Node.js + Express 5. Отвечает за вход, проекты, очередь рендера, проксирование гео-сервисов и сам рендер видео. Код организован по папкам: <code>routes</code> (точки входа API), <code>services</code> (бизнес-логика), <code>middleware</code> (проверки), <code>render</code> (конвейер видео), <code>db</code> (база), <code>cron</code> (фоновые задачи).</p>
+
+<h3>Карта API (по роутерам)</h3>
+<table>
+  <tr><th>Группа</th><th>Эндпоинты</th><th>Доступ</th></tr>
+  <tr><td><code>/api/auth</code></td><td>login, logout, me, csrf</td><td>login/csrf — публичные; остальное — по сессии</td></tr>
+  <tr><td><code>/api/admin</code></td><td>список/создание/удаление пользователей</td><td>только роль admin + CSRF</td></tr>
+  <tr><td><code>/api/render</code></td><td>поставить рендер, статус, активный, скачать, состояние по токену</td><td>по сессии (кроме state — токен или сессия)</td></tr>
+  <tr><td><code>/api/history</code></td><td>список «Моя история», скачивание, миниатюра</td><td>по сессии, только свои файлы</td></tr>
+  <tr><td><code>/api/geocode</code></td><td>поиск места (прокси Photon)</td><td>по сессии + лимит 60/мин</td></tr>
+  <tr><td><code>/api/route</code></td><td>маршрут по дорогам (прокси OSRM)</td><td>по сессии + лимит 30/мин</td></tr>
+  <tr><td><code>/api/fonts</code></td><td>список доступных шрифтов</td><td>публичный (нужен и странице рендера)</td></tr>
+  <tr><td><code>/api/users/me/colors</code></td><td>личная палитра цветов</td><td>по сессии</td></tr>
+  <tr><td><code>/api/health</code></td><td>проверка живости</td><td>публичный</td></tr>
+  <tr><td><code>/assets/*</code></td><td>иконки, шрифты, кадры огня</td><td>статика, публично</td></tr>
+</table>
+
+<h3>Принципы API</h3>
+<ul>
+  <li>Все ошибки — единый JSON <code>{ "error": "текст на русском" }</code> с кодами 400/401/403/404/409/429/500.</li>
+  <li>Имена полей и путей — английские; тексты ошибок и логи — русские (правило проекта).</li>
+  <li>Сервер за прокси доверяет <code>X-Forwarded-*</code> только от localhost (<code>trust proxy = loopback</code>) — корректные IP для rate-limit и протокол https.</li>
+  <li>Логи — структурный JSON (библиотека <b>pino</b>), удобно искать по <code>jobId</code>, <code>userId</code> и т.п.</li>
+</ul>
+
+<h3>При старте сервера</h3>
+<p>Файл <code>server.ts</code> делает 4 вещи: (1) гарантирует наличие пользователя <code>admin</code> (создаёт из <code>ADMIN_PASSWORD</code>, если БД пустая), (2) поднимает Express, (3) запускает рендер-воркер и «лечит» зависшие задачи после рестарта, (4) ставит ночной cron очистки старых видео.</p>
+
+<div class="alt">
+  <div class="col pros"><h4>Плюсы выбора Express</h4><ul>
+    <li>Самый зрелый и простой веб-фреймворк Node — минимум магии.</li>
+    <li>Огромная экосистема готовых middleware (rate-limit, cookie-parser).</li>
+    <li>Низкий порог входа для нового разработчика.</li>
+  </ul></div>
+  <div class="col cons"><h4>Минусы / альтернативы</h4><ul>
+    <li>Express «голый»: валидацию, типобезопасность роутов делаем руками (могли бы NestJS/Fastify).</li>
+    <li>Fastify быстрее на чистом HTTP, но узкое место проекта — рендер, а не маршрутизация, так что выигрыш незаметен.</li>
+    <li>Нет встроенного DI/структуры — дисциплину папок держим соглашением.</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему нет ORM (Prisma/TypeORM)?</summary><div class="ans">Схема маленькая (5 таблиц) и запросы простые. Используется драйвер <code>pg</code> с параметризованными запросами — это защищает от SQL-инъекций и не тащит тяжёлый слой абстракции. Для проекта такого размера ORM был бы избыточен.</div></details>
+  <details class="qa"><summary>Как устроены миграции БД?</summary><div class="ans">Простые SQL-файлы (<code>001_initial.sql</code>, <code>002_*.sql</code>) применяются скриптом <code>db:migrate</code>. Без тяжёлого фреймворка миграций — по принципу «минимум инструментов».</div></details>
+  <details class="qa"><summary>Что если бэкенд перезапустится во время рендера?</summary><div class="ans">При старте воркер помечает все «running» задачи как «error» с понятным сообщением («Рендер прерван рестартом сервера»), чтобы не было вечно висящих задач. Очередь хранится в БД и переживает рестарт.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="render"><h2><span class="num">7</span>Конвейер рендера видео</h2><p class="lead">Это самая сложная и самая ценная часть проекта. Задача: превратить «живое» превью в браузере в готовый видеофайл <b>на сервере</b>, кадр в кадр совпадающий с тем, что видел пользователь.</p>
+
+<div class="box why"><div class="t">Почему рендер серверный, а не в браузере</div>
+Можно было бы записать видео прямо в браузере (Web API <code>MediaRecorder</code>). Но тогда: (1) запись прервётся, если пользователь закроет вкладку; (2) результат зависит от мощности компьютера пользователя; (3) нельзя поставить в очередь и контролировать качество. Поэтому видео всегда считается на сервере — пользователь может закрыть браузер и забрать готовый ролик позже.</div>
+
+<h3>Как это работает технически (Render V2)</h3>
+<ol>
+  <li><b>Запуск браузера.</b> Бэкенд через <b>Puppeteer</b> поднимает «невидимый» Chrome и открывает страницу <code>render-page-v2</code> с размером кадра ровно 1920×1080.</li>
+  <li><b>Готовность.</b> Страница грузит карту, шрифты и анимации и выставляет флаг <code>mapReadyV2 = true</code> (или сообщает об ошибке). Бэкенд ждёт этот сигнал.</li>
+  <li><b>Покадровая съёмка.</b> Через протокол <b>CDP</b> (Chrome DevTools Protocol) включается «скринкаст»: Chrome отдаёт JPEG-картинку каждого кадра. Для каждого кадра бэкенд сначала командует странице «установи время = N-я секунда», затем снимает картинку.</li>
+  <li><b>Кодирование.</b> JPEG-кадры идут <b>напрямую в память FFmpeg</b> (поток stdin, без сохранения PNG на диск) — FFmpeg собирает из них H.264/MP4.</li>
+  <li><b>Гео-титр (если включён).</b> Второй проход рисует титр в отдельном прозрачном слое и накладывает на базовое видео.</li>
+  <li><b>Финал.</b> Делается миниатюра (первый кадр), файл сохраняется в <code>/data/videos</code>, статус задачи → <code>done</code>.</li>
+</ol>
+
+<h3>Детерминизм: почему анимация не «дёргается»</h3>
+<div class="box how"><div class="t">Ключевой инженерный приём</div>
+Обычно анимации идут по «настоящим» часам. При покадровой съёмке это даёт рассинхрон (дрожание). Решение: на странице рендера часы GSAP <b>останавливаются</b> (<code>gsap.ticker.sleep()</code>, <code>globalTimeline.pause(0)</code>), и на каждый кадр время задаётся вручную: <code>globalTimeline.time(сек)</code>. Так кадр для секунды 1.000 всегда одинаков — анимация плавная и воспроизводимая.</div>
+
+<h3>Шрифты в видео</h3>
+<p>WebGL-текст PixiJS «видит» только уже загруженные шрифты. Если рендер начать раньше загрузки — подписи выйдут дефолтным шрифтом. Поэтому страница рендера: подгружает шрифты (FontFace API + <code>@font-face</code>), ждёт <code>document.fonts.ready</code>, явно проверяет каждый нужный вес (<code>document.fonts.check</code>), пересоздаёт текстовые объекты и только потом разрешает съёмку.</p>
+
+<h3>GPU или CPU?</h3>
+<div class="box warn"><div class="t">Честно о текущем состоянии</div>
+Сейчас рендер идёт на <b>CPU</b>: переменная <code>RENDER_USE_GPU=false</code>, WebGL эмулируется через SwiftShader (программный рендер), а FFmpeg кодирует кодеком <code>libx264</code> (на процессоре). Код умеет и GPU-режим (флаги Chrome + кодек <code>h264_nvenc</code>), но на текущей виртуальной машине драйвер видеокарты NVIDIA не подгружается, поэтому стабильно работает именно CPU-путь.</div>
+
+<h3>Очередь рендера</h3>
+<ul>
+  <li>Один пользователь — одна активная задача одновременно (иначе HTTP 429).</li>
+  <li>На сервере одновременно считается <b>один</b> рендер (single-worker); в очереди до 5 задач, дальше 429.</li>
+  <li>Очередь и статусы хранятся в таблице <code>render_jobs</code> в PostgreSQL — переживают перезапуск сервера. Захват следующей задачи защищён от гонок через <code>FOR UPDATE SKIP LOCKED</code>.</li>
+</ul>
+
+<div class="alt">
+  <div class="col pros"><h4>Плюсы выбранного подхода (Puppeteer + CDP + FFmpeg)</h4><ul>
+    <li>Идеальное совпадение «превью = видео»: снимается ровно та же страница.</li>
+    <li>CDP-скринкаст быстрее, чем делать обычные скриншоты по одному.</li>
+    <li>Кадры не пишутся на диск (поток в память) — меньше I/O.</li>
+    <li>Очередь в БД устойчива к сбоям.</li>
+  </ul></div>
+  <div class="col cons"><h4>Минусы / честные ограничения</h4><ul>
+    <li>«Настоящий браузер» на сервере — тяжёлый и капризный (WebGL, память).</li>
+    <li>CPU-рендер медленный: на длинных роликах не укладывается в целевой ×3 (см. «Производительность»).</li>
+    <li>Один воркер: при нескольких пользователях образуется очередь.</li>
+    <li>JPEG-кадры (а не PNG) — небольшая потеря качества ради скорости.</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему JPEG-кадры, а не PNG без потерь?</summary><div class="ans">CDP-скринкаст отдаёт JPEG (качество 75) — это сильно быстрее и легче по объёму, чем PNG. Для карты с анимациями визуальная потеря незаметна, а скорость важнее. В более ранней версии использовались PNG-скриншоты, но это было медленнее.</div></details>
+  <details class="qa"><summary>Что мешает считать несколько видео параллельно?</summary><div class="ans">Каждый рендер — это отдельный Chrome + FFmpeg, они тяжёлые по CPU и памяти. Один воркер выбран ради стабильности на одной машине. Масштабирование — это вертикальный апгрейд сервера или несколько воркеров (план на будущее).</div></details>
+  <details class="qa"><summary>Что такое CDP простыми словами?</summary><div class="ans">Это «служебный пульт» Chrome, через который можно командовать браузером: открой страницу, выполни код, начни отдавать кадры экрана. Им же пользуются инструменты разработчика в Chrome.</div></details>
+  <details class="qa"><summary>Как гарантируется, что кадр готов к съёмке?</summary><div class="ans">Перед стартом ждём готовности карты и шрифтов; есть «прогрев» (несколько первых кадров отбрасываются, пока движок устаканится), таймаут и обработка ошибок потока (EPIPE), чтобы один сбойный кадр не ронял весь процесс.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="db"><h2><span class="num">8</span>База данных</h2><p class="lead">Используется PostgreSQL 16 с расширением PostGIS. Фактически две логические базы: <b>приложение</b> (пользователи, задачи) и <b>gis</b> (геоданные OpenStreetMap для тайлов).</p>
+
+<h3>Таблицы базы приложения</h3>
+<table>
+  <tr><th>Таблица</th><th>Что хранит</th><th>Тонкость</th></tr>
+  <tr><td><code>users</code></td><td>логин, хэш пароля, роль, дата</td><td>Пароль хранится только как bcrypt-хэш; есть личная палитра цветов (массив)</td></tr>
+  <tr><td><code>sessions</code></td><td>сессии пользователей</td><td>Хранится только <b>sha256-хэш</b> токена из cookie — при утечке БД сессии не угнать</td></tr>
+  <tr><td><code>render_jobs</code></td><td>очередь + история видео</td><td>Один источник правды: «Моя история» = записи со статусом <code>done</code>. Отдельной таблицы videos нет</td></tr>
+  <tr><td><code>render_tokens</code></td><td>одноразовые токены для Puppeteer</td><td>Тоже хранится хэш; токен «сгорает» после первого использования, TTL 10 минут</td></tr>
+</table>
+<p class="mini">Статусы задачи рендера: <code>queued → running → done | error | cancelled</code>. Прогресс — число 0–100. Состояние карты целиком лежит в поле <code>state_json</code> (тип JSONB).</p>
+
+<h3>База gis (для карты)</h3>
+<p>Сюда импортируются данные OpenStreetMap (таблицы <code>planet_osm_line</code>, <code>planet_osm_polygon</code>). Поверх них — расширение PostGIS и наши SQL-функции <code>mv_roads</code>/<code>mv_water</code>/<code>mv_landuse</code>, которые отдают готовые векторные тайлы (см. раздел «Тайлы»).</p>
+
+<div class="alt">
+  <div class="col pros"><h4>Почему PostgreSQL + PostGIS</h4><ul>
+    <li>PostGIS — фактический стандарт для геоданных: индексы по геометрии, упрощение, обрезка по тайлу.</li>
+    <li>Одна СУБД и для приложения, и для карты — меньше движущихся частей.</li>
+    <li>Транзакции и блокировки решают гонки в очереди рендера.</li>
+  </ul></div>
+  <div class="col cons"><h4>Минусы / альтернативы</h4><ul>
+    <li>На низких зумах генерация тайлов нагружает БД (смягчено индексами и кэшем).</li>
+    <li>Для очереди задач можно было взять Redis/RabbitMQ — но это лишний сервис; БД-очереди для одного воркера достаточно.</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему очередь в базе, а не в Redis?</summary><div class="ans">Один воркер и небольшая нагрузка. БД-очередь проще (нет ещё одного сервиса), переживает рестарт и защищена транзакциями. Redis оправдан при масштабировании на много воркеров.</div></details>
+  <details class="qa"><summary>Что если утечёт база — украдут сессии?</summary><div class="ans">Нет: в БД лежат только sha256-хэши токенов сессий и render-токенов, а также bcrypt-хэши паролей. По хэшу нельзя восстановить рабочий токен или пароль.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="tiles"><h2><span class="num">9</span>Тайлы карты (Martin + PostGIS)</h2><p class="lead">«Тайлы» — это кусочки карты (квадратики), из которых браузер собирает изображение. Их отдаёт сервер <b>Martin</b> прямо из PostGIS. Здесь была проведена одна из самых результативных оптимизаций проекта.</p>
+
+<div class="box what"><div class="t">Что такое векторные тайлы</div>
+Вместо картинок сервер отдаёт «геометрию» (линии дорог, контуры воды) в компактном бинарном формате MVT, а рисует уже браузер. Это позволяет плавно менять тему (день/ночь) и масштаб без перезагрузки картинок.</div>
+
+<h3>Проблема, которую решили</h3>
+<p>Изначально Martin отдавал сырые таблицы без фильтрации. На общем виде страны один тайл доходил до <b>96 МБ</b> и грузился до <b>20 секунд</b> — карта фактически не открывалась. Первый просмотр тянул ~958 МБ трафика.</p>
+
+<h3>Решение: zoom-adaptive SQL-функции</h3>
+<p>Вместо «отдать всё» написаны функции <code>mv_roads</code>, <code>mv_water</code>, <code>mv_landuse</code> (файл <code>db/sql/01-zoom-adaptive-tiles.sql</code>), которые в зависимости от масштаба:</p>
+<ul>
+  <li><b>фильтруют</b> объекты (на общем виде — только крупные дороги и большие водоёмы);</li>
+  <li><b>упрощают</b> геометрию (<code>ST_SimplifyPreserveTopology</code>) — меньше точек на мелком масштабе;</li>
+  <li>отдают готовый MVT (<code>ST_AsMVT</code>). Плюс добавлены пространственные индексы.</li>
+</ul>
+
+<h3>Результат (реальные замеры, до/после)</h3>
+<table>
+  <tr><th>Тайл</th><th>Было</th><th>Стало</th></tr>
+  <tr><td>дороги, общий вид (z4)</td><td>~99 МБ / 6.3 с</td><td>0.37 МБ / 0.66 с</td></tr>
+  <tr><td>вода, общий вид (z4)</td><td>~40 МБ / 8.4 с</td><td>0.002 МБ / 0.97 с</td></tr>
+  <tr><td>выборка 150 тайлов (среднее)</td><td>секунды</td><td>0.26 с (после прогрева кэша — 0.027 с)</td></tr>
+</table>
+<p class="mini">Выигрыш — десятки и сотни раз. Дополнительно: кэш внутри Martin + кэш в Nginx (<code>proxy_cache</code>, заголовок <code>X-Tile-Cache: HIT/MISS</code>) + скрипт прогрева <code>warm-tiles-cache.sh</code>.</p>
+
+<div class="alt">
+  <div class="col pros"><h4>Плюсы этого пути</h4><ul>
+    <li>Дёшево (~1 день работы), без новых сервисов.</li>
+    <li>Данные «живые»: правка в БД сразу видна на карте.</li>
+    <li>Покрыло ~95% потребности по скорости.</li>
+  </ul></div>
+  <div class="col cons"><h4>Минусы / что можно лучше</h4><ul>
+    <li>Каждый «холодный» тайл всё же нагружает PostgreSQL (смягчено кэшем).</li>
+    <li>Индустриальный максимум — заранее сгенерированные PMTiles (отдаются как статика, 0 нагрузки на БД), но это отдельная подсистема и потеря «живых» правок.</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему не сразу PMTiles, раз это «индустриальный стандарт»?</summary><div class="ans">PMTiles требует отдельного pipeline генерации (30–60 мин на регион), файла на 3–6 ГБ и ломает сценарий «правка в БД сразу на карте». Для v1 SQL-функции дали нужный результат в разы дешевле. PMTiles — заложенный путь развития при массовом публичном трафике.</div></details>
+  <details class="qa"><summary>Что делает Nginx-кэш тайлов?</summary><div class="ans">Хранит уже отданные тайлы между пользователями: повторные запросы тех же квадратиков не доходят до Martin/БД. Заголовок <code>X-Tile-Cache</code> показывает HIT (из кэша) или MISS.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="routing"><h2><span class="num">10</span>Маршрутизация (OSRM)</h2><p class="lead"><b>OSRM</b> (Open Source Routing Machine) строит маршруты по реальным дорогам. Нужен, когда у значка «автомобиль» стоит галочка «маршрут по дороге» — тогда линия идёт не по прямой, а по трассам.</p>
+
+<h3>Как используется</h3>
+<ul>
+  <li>Бэкенд проксирует запрос: <code>GET /api/route?start=…&end=…</code> → OSRM (алгоритм <b>MLD</b>).</li>
+  <li>Запрашивается облегчённая геометрия (<code>overview=simplified</code>) — меньше точек, быстрее отрисовка.</li>
+  <li><b>Graceful fallback:</b> если OSRM недоступен/не нашёл маршрут — бэкенд возвращает <i>прямую линию</i> со статусом 200 и флагом <code>fallback:true</code>. UI показывает уведомление, но не ломается.</li>
+</ul>
+
+<div class="box good"><div class="t">Эффект оптимизации (реальные цифры)</div>
+Для длинного маршрута Москва → Новосибирск: запрос <code>overview=simplified</code> сократил геометрию с <b>20 702</b> точек до <b>23</b> точек, без потери визуального качества на карте. Это резко снизило нагрузку на отрисовку каждого кадра (раньше пользователи жаловались на лаги).</div>
+
+<div class="alt">
+  <div class="col pros"><h4>Плюсы</h4><ul>
+    <li>OSRM очень быстрый (ответ 0.05–0.12 с по России).</li>
+    <li>Open-source, работает на тех же данных OSM.</li>
+    <li>Fallback не даёт UX «сломаться» при недоступности.</li>
+  </ul></div>
+  <div class="col cons"><h4>Минусы</h4><ul>
+    <li>Требует отдельной подготовки данных (extract → partition → customize).</li>
+    <li>Профиль «авто» (car.lua) — для пешеходов/велосипедов нужен отдельный.</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему прямая линия при сбое, а не ошибка?</summary><div class="ans">С точки зрения пользователя маршрут «есть» — просто без привязки к дорогам. Деградировать мягко лучше, чем блокировать создание видео из-за временной недоступности сервиса.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="geocoding"><h2><span class="num">11</span>Геокодирование (Photon)</h2><p class="lead"><b>Photon</b> — геокодер: превращает текст («Москва») в координаты и подсказки. Используется при добавлении точки.</p>
+
+<h3>Особенность: внешний сервис</h3>
+<p>Свой геокодер не поднимается — это потребовало бы хранить мировой индекс ~75 ГБ. Вместо этого бэкенд проксирует запросы к публичному <code>photon.komoot.io</code> (<code>GET /api/geocode/search</code>). Прокси нужен, чтобы: скрыть внешний адрес, наложить лимит запросов и <b>дедуплицировать</b> результаты (Photon часто возвращает один город несколько раз — мы запрашиваем втрое больше и схлопываем дубли по названию).</p>
+
+<div class="alt">
+  <div class="col pros"><h4>Плюсы внешнего геокодера</h4><ul>
+    <li>Ноль инфраструктуры и обслуживания индекса.</li>
+    <li>Для русских городов отдаёт кириллицу (имена из OSM).</li>
+  </ul></div>
+  <div class="col cons"><h4>Минусы / риски</h4><ul>
+    <li>Зависимость от стороннего сервиса (может тормозить/ограничивать — стоит таймаут 15 с).</li>
+    <li>Публичный Photon не поддерживает <code>lang=ru</code> для зарубежных мест.</li>
+    <li>План «Б» заложен: при упоре в лимиты — поднять свой Photon (~75 ГБ).</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Не опасно ли зависеть от внешнего сервиса в эфирном продукте?</summary><div class="ans">Геокодер нужен только на этапе <i>создания</i> точки (подсказка названия), а не при рендере. Если он недоступен — пользователь просто вводит название вручную. На готовое видео это не влияет. При необходимости поднимается self-hosted Photon.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="osm"><h2><span class="num">12</span>Данные OpenStreetMap</h2><p class="lead">Источник всех географических данных — <b>OpenStreetMap</b> (OSM): свободная «Википедия карт». Из неё берутся дороги, вода, границы — и для тайлов карты, и для маршрутов OSRM.</p>
+
+<h3>Что и как загружается</h3>
+<ul>
+  <li>По умолчанию — экстракт <b>России</b> (<code>russia-260419.osm.pbf</code>, ~3–4 ГБ). Файл лежит на сервере, в git не коммитится.</li>
+  <li>Импорт в PostGIS делает <code>osm2pgsql</code> (скрипт <code>scripts/import-osm.sh</code>), затем применяются SQL-функции тайлов, затем готовится OSRM (extract → partition → customize).</li>
+  <li><b>Переключение на весь мир</b> — это одна переменная <code>OSM_PBF_FILE</code> в <code>.env</code> (скачать <code>planet-latest.osm.pbf</code>), без изменения кода.</li>
+</ul>
+
+<div class="box warn"><div class="t">Лицензия (важно знать на защите)</div>
+OSM распространяется по лицензии <b>ODbL</b>. Она бесплатна, но требует указывать атрибуцию («© OpenStreetMap contributors»). Это юридический нюанс для публичного эфирного использования — стоит держать в голове (затрагивали этот вопрос в обсуждении проекта).</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему OSM, а не коммерческие карты?</summary><div class="ans">Бесплатно, без чужих логотипов на видео, полный контроль над стилем и данными. Цена — обязательная атрибуция ODbL и самостоятельная подготовка данных.</div></details>
+  <details class="qa"><summary>Насколько свежие данные карты?</summary><div class="ans">Это статический экстракт (снимок на определённую дату). Обновление — перезалить свежий <code>.pbf</code> и повторить импорт. Для новостных карт уровня «город/трасса» это не критично.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="infra"><h2><span class="num">13</span>Инфраструктура: Docker и сервисы</h2><p class="lead">Всё приложение упаковано в <b>Docker Compose</b> — пять сервисов, описанных в одном файле. Это даёт воспроизводимое окружение: «поднять весь стек одной командой».</p>
+
+<h3>Пять сервисов</h3>
+<table>
+  <tr><th>Сервис</th><th>Образ / версия</th><th>Порт (только localhost)</th><th>Роль</th></tr>
+  <tr><td>postgres</td><td>postgis/postgis:16-3.4</td><td>127.0.0.1:5432</td><td>База данных + геоданные</td></tr>
+  <tr><td>martin</td><td>maplibre/martin:v0.14.2</td><td>127.0.0.1:3002</td><td>Тайлы карты</td></tr>
+  <tr><td>osrm</td><td>osrm-backend:v5.27.1</td><td>127.0.0.1:5000</td><td>Маршруты по дорогам</td></tr>
+  <tr><td>backend</td><td>сборка из ./backend</td><td>127.0.0.1:3001</td><td>API + рендер</td></tr>
+  <tr><td>frontend</td><td>сборка из ./frontend</td><td>127.0.0.1:3000</td><td>Раздача SPA</td></tr>
+</table>
+
+<div class="box note"><div class="t">Ключевой принцип сети</div>
+Все контейнеры слушают <b>только 127.0.0.1</b> (локально). Наружу (в интернет) смотрит исключительно <b>хостовой Nginx</b> на портах 80/443. Так внутренние сервисы недоступны снаружи напрямую. Nginx в Docker сознательно не поднимается — на сервере уже есть хостовой, и он же обслуживает другой независимый проект.</div>
+
+<ul>
+  <li>У каждого сервиса есть <b>healthcheck</b> (проверка живости) и зависимости запуска (<code>depends_on</code>): например, backend ждёт «здоровую» базу.</li>
+  <li>Данные БД и готовые видео хранятся в <b>volumes</b> (переживают пересоздание контейнеров).</li>
+  <li>Ассеты (иконки, шрифты) монтируются в backend только на чтение (<code>:ro</code>).</li>
+</ul>
+
+<div class="box warn"><div class="t">Свежая правка (из нашей работы)</div>
+После перезагрузки сервера backend не стартовал: в compose была жёсткая привязка к устройствам видеокарты (<code>/dev/nvidia*</code>), а драйвер NVIDIA на VM не поднялся. Мы убрали эту обязательную привязку (рендер и так в CPU-режиме) — сервис снова запускается стабильно. Это типичный пример «инфраструктурного» долга, который всплыл при ребуте.</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему Docker Compose, а не Kubernetes?</summary><div class="ans">Один сервер, небольшой масштаб, внутренний инструмент. Compose проще в эксплуатации и полностью покрывает потребность. Kubernetes оправдан при множестве серверов и автоскейлинге — здесь это была бы лишняя сложность.</div></details>
+  <details class="qa"><summary>Почему Nginx на хосте, а не в контейнере?</summary><div class="ans">На сервере уже есть хостовой Nginx, обслуживающий другой проект и сертификаты. Поднимать второй (контейнерный) на тех же портах 80/443 — конфликт. Поэтому единый хостовой Nginx — общая точка входа.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="nginx"><h2><span class="num">14</span>Nginx, SSL и миграция домена</h2><p class="lead">Хостовой <b>Nginx</b> — единственная дверь в интернет. Он шифрует трафик (HTTPS) и распределяет запросы между сервисами.</p>
+
+<h3>Что куда проксируется</h3>
+<table>
+  <tr><th>Путь</th><th>Куда</th><th>Назначение</th></tr>
+  <tr><td><code>/</code></td><td>frontend :3000</td><td>Само приложение (SPA)</td></tr>
+  <tr><td><code>/api/</code></td><td>backend :3001</td><td>API</td></tr>
+  <tr><td><code>/assets/</code></td><td>backend :3001</td><td>Иконки и шрифты (с кэшем)</td></tr>
+  <tr><td><code>/tiles/</code></td><td>martin :3002</td><td>Тайлы карты + <b>кэш Nginx</b></td></tr>
+</table>
+
+<h3>HTTPS / сертификаты</h3>
+<p>Сертификаты — бесплатные от <b>Let's Encrypt</b> (Certbot), автопродление. Nginx добавляет заголовок <code>X-Forwarded-Proto=https</code>, по которому backend понимает, что за ним TLS, и выставляет «secure»-cookie.</p>
+
+<div class="box warn"><div class="t">Миграция домена (из нашей работы)</div>
+Сервис недавно переехал с <code>mapvideo.gyhyry.ru</code> на <code>mapvideo.gyhyry.com</code>. Что сделали: создали новый конфиг Nginx для <code>.com</code>, отключили старый <code>.ru</code>, выпустили <b>отдельный</b> сертификат Certbot для нового домена, обновили переменную <code>FRONTEND_URL</code> (важно для Puppeteer-рендера) и перезапустили backend. Проверки <code>/api/health</code>, фронт и тайлы вернули 200. Критично: при этом <b>не трогали</b> соседний проект <code>maps.gyhyry.ru</code> на том же сервере.</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Зачем при смене домена менять FRONTEND_URL?</summary><div class="ans">Puppeteer при рендере открывает страницу по этому адресу. Если оставить старый домен — рендер будет ходить «не туда». Поэтому переменную обновили и перезапустили backend.</div></details>
+  <details class="qa"><summary>Как уживаются два проекта на одном Nginx?</summary><div class="ans">Через разные server-блоки по доменному имени (server_name) и отдельные сертификаты. Конфиги независимы, поэтому правки Mapvideo не затрагивают соседний сервис.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="security"><h2><span class="num">15</span>Безопасность</h2><p class="lead">Безопасность построена на проверенных простых механизмах, без модных, но рискованных решений. Сознательно <b>не используются JWT</b> — вместо них классические серверные сессии.</p>
+
+<h3>Аутентификация и сессии</h3>
+<ul>
+  <li><b>Вход:</b> логин + пароль. Пароли хранятся как <b>bcrypt</b>-хэш (12 раундов) — не в открытом виде.</li>
+  <li><b>Сессия:</b> случайный «непрозрачный» токен в httpOnly-cookie (браузерный JS его не прочитает). В БД лежит только sha256-хэш токена. Срок — 30 дней.</li>
+  <li><b>Защита от перебора имён:</b> при неверном логине всё равно выполняется bcrypt-сравнение с «пустышкой» — время ответа одинаково, нельзя угадать существующего пользователя по скорости.</li>
+</ul>
+
+<h3>Защита от CSRF</h3>
+<p>Используется паттерн <b>double-submit cookie</b>: при входе ставится не-httpOnly cookie <code>csrf_token</code>; на изменяющих запросах фронт дублирует её значение в заголовок <code>X-CSRF-Token</code>, а бэкенд сверяет их. Плюс cookie помечены <code>SameSite=Lax</code>.</p>
+
+<h3>Ограничение частоты (rate-limit)</h3>
+<ul>
+  <li>Вход: 5 неудачных попыток с одного IP за 10 минут → 429 (успешные не считаются).</li>
+  <li>Геокодер: 60/мин, маршруты: 30/мин — чтобы не перегружать внешние сервисы.</li>
+</ul>
+
+<h3>Прочие меры</h3>
+<ul>
+  <li><b>Валидация всего ввода:</b> «снимок» карты проверяется по жёсткой схеме; имена/пароли — по правилам; координаты — по диапазонам.</li>
+  <li><b>Защита от обхода путей</b> (path traversal): скачивание видео разрешено только из папки самого пользователя; cron-удаление — только внутри <code>/data/videos</code>.</li>
+  <li><b>Изоляция доступа:</b> пользователь видит и скачивает только свои рендеры (проверка владельца задачи).</li>
+  <li><b>Секреты</b> (<code>.env</code>) не коммитятся в git; пароль admin задаётся переменной окружения.</li>
+  <li><b>Скрытая страница рендера</b> доступна Puppeteer только по одноразовому токену с TTL — не по постоянному паролю.</li>
+</ul>
+
+<div class="alt">
+  <div class="col pros"><h4>Почему сессии, а не JWT</h4><ul>
+    <li>Сессию можно мгновенно отозвать (удалить из БД) — JWT так просто не отзовёшь.</li>
+    <li>Нет хранения секрета подписи и риска его утечки.</li>
+    <li>httpOnly-cookie недоступна для XSS-кражи токена.</li>
+  </ul></div>
+  <div class="col cons"><h4>Честные ограничения</h4><ul>
+    <li>Сессии требуют обращения к БД (для внутреннего инструмента — не проблема).</li>
+    <li>Нет двухфакторной аутентификации (не требовалась для v1).</li>
+    <li>Нет журналирования аудита действий пользователей сверх логов входа.</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему отказались от JWT — это же модно?</summary><div class="ans">JWT хорош для распределённых stateless-систем. У нас один сервер и важна возможность мгновенно «выкинуть» сессию (увольнение, утечка). Серверная сессия проще, безопаснее в отзыве и не требует хранить секрет подписи.</div></details>
+  <details class="qa"><summary>Что с SQL-инъекциями?</summary><div class="ans">Все запросы параметризованные (драйвер <code>pg</code>), пользовательские данные не склеиваются в строку SQL. Имена таблиц/колонок — фиксированные.</div></details>
+  <details class="qa"><summary>А если злоумышленник украдёт cookie?</summary><div class="ans">Cookie сессии — httpOnly и Secure (только по HTTPS), JS её не прочитает (защита от XSS-кражи). CSRF закрыт double-submit + SameSite. Полную защиту от кражи устройства это, конечно, не даёт — но это уровень, адекватный внутреннему инструменту.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="assets"><h2><span class="num">16</span>Ассеты: иконки и шрифты</h2><p class="lead">Ассеты — это картинки иконок и файлы шрифтов. Лежат в папке <code>assets/</code> и раздаются бэкендом по пути <code>/assets/*</code>.</p>
+
+<h3>Иконки эффектов и транспорта</h3>
+<table>
+  <tr><th>Иконка</th><th>Тип</th><th>Как анимируется</th></tr>
+  <tr><td>Огонь</td><td>PNG-секвенция (150 кадров)</td><td>Зацикленное проигрывание весь ролик</td></tr>
+  <tr><td>Взрыв</td><td>PNG + процедура</td><td>Иконка + расходящиеся круги (рисуются кодом)</td></tr>
+  <tr><td>Землетрясение</td><td>PNG</td><td>Статично</td></tr>
+  <tr><td>Авто/самолёт/вертолёт/корабль</td><td>PNG</td><td>Двигается по маршруту, поворачивается по направлению</td></tr>
+  <tr><td>Мигающая точка</td><td>—</td><td>Полностью процедурная (PixiJS+GSAP), без картинки</td></tr>
+</table>
+
+<h3>Шрифты подписей</h3>
+<p>Список шрифтов формируется автоматически из файлов в <code>assets/fonts/</code> (эндпоинт <code>/api/fonts</code>). Хитрость: из имени файла (<code>Montserrat-Bold.ttf</code>) определяется начертание и числовой вес (700). Без явного веса в <code>@font-face</code> браузер «схлопывает» все варианты Montserrat в один — это был реальный баг, который починили.</p>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему иконки публичны (без авторизации)?</summary><div class="ans">Это несекретные ресурсы, и их должна грузить и страница рендера (Puppeteer), которая не имеет пользовательской cookie. Поэтому <code>/assets/*</code> и <code>/api/fonts</code> сделаны публичными намеренно.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="testing"><h2><span class="num">17</span>Тестирование</h2><p class="lead">Тесты есть на обеих сторонах. Философия проекта: «исправляешь баг — сначала напиши тест, который его воспроизводит, потом почини».</p>
+
+<h3>Чем тестируем</h3>
+<ul>
+  <li><b>Бэкенд:</b> Jest + supertest — проверка API: авторизация (401/403/429), CSRF, валидация, прокси маршрутов (включая fallback OSRM), палитра цветов, шрифты.</li>
+  <li><b>Фронтенд:</b> Vitest + React Testing Library — состояние редактора, панели настроек, поведение drag, расчёт геометрии маршрутов, выбор цвета.</li>
+  <li><b>Типобезопасность:</b> строгий TypeScript (<code>typecheck</code>) на фронте и бэке — отдельная «сетка безопасности» помимо тестов.</li>
+  <li><b>Бенчмарк рендера:</b> скрипт <code>scripts/benchmark-render-v2.sh</code> гоняет сценарии 3/10/30 с на 25p/50p и проверяет лимит времени.</li>
+</ul>
+
+<div class="alt">
+  <div class="col pros"><h4>Сильные стороны</h4><ul>
+    <li>Покрыты критичные места: безопасность, контракты API, логика редактора.</li>
+    <li>Регрессионные тесты на реальные баги (drag, шрифты, очередь).</li>
+    <li>Типизация ловит ошибки до запуска.</li>
+  </ul></div>
+  <div class="col cons"><h4>Честные пробелы</h4><ul>
+    <li>Нет полноценных end-to-end тестов «через настоящий браузер» всего пути рендера.</li>
+    <li>Визуальное качество кадра проверяется в основном вручную (QA-чеклист).</li>
+    <li>Нет автоматического замера «дрожания» анимации в CI.</li>
+  </ul></div>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Какое покрытие тестами?</summary><div class="ans">Точная цифра покрытия не самоцель; упор на критичные пути (auth, валидация, контракты, логика редактора) и регресс-тесты на ранее найденные баги. Рендер проверяется бенчмарком и ручным QA-чеклистом.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="performance"><h2><span class="num">18</span>Производительность и узкие места</h2><p class="lead">Здесь собраны измеримые результаты и честный разговор об узких местах — это любимая тема проверяющих.</p>
+
+<h3>Где уже хорошо</h3>
+<ul>
+  <li><b>Тайлы карты:</b> ускорение в десятки–сотни раз (96 МБ/20 с → доли МБ/доли секунды). После прогрева кэша среднее время тайла ~0.03 с.</li>
+  <li><b>Маршруты:</b> геометрия длинных маршрутов ужата с ~20 700 до ~23 точек — отрисовка кадра резко легче.</li>
+  <li><b>Карта в эфире:</b> открывается за секунды вместо «никогда».</li>
+</ul>
+
+<h3>Главное узкое место — скорость рендера видео</h3>
+<div class="box warn"><div class="t">Целевой SLA и реальность</div>
+Ориентир: обработка должна укладываться в <b>×3 от длительности</b> ролика (10-секундное видео — за ~30 с). На <b>CPU</b>-рендере (текущий стабильный режим) длинные/сложные ролики этот лимит превышают: в логах видны случаи, когда 5-секундный ролик обрабатывался ~50+ секунд. Это прямое следствие отказа от GPU (драйвер на VM недоступен).</div>
+
+<h3>Что ограничивает и как лечится</h3>
+<table>
+  <tr><th>Узкое место</th><th>Причина</th><th>Путь решения</th></tr>
+  <tr><td>Скорость рендера</td><td>CPU вместо GPU (нет драйвера NVIDIA)</td><td>Поднять GPU (NVENC + аппаратный WebGL) — код уже это поддерживает</td></tr>
+  <tr><td>Параллелизм</td><td>Один воркер рендера</td><td>Несколько воркеров / более мощный сервер</td></tr>
+  <tr><td>Холодные тайлы</td><td>Генерация в PostGIS</td><td>Прогрев кэша; в перспективе — PMTiles</td></tr>
+  <tr><td>Зависимость от Photon</td><td>Внешний геокодер</td><td>Self-hosted Photon при упоре в лимиты</td></tr>
+</table>
+
+<div class="box note"><div class="t">Ориентир по «железу»</div>
+Для комфортной работы ~10 пользователей с GPU-рендером обсуждался сервер уровня Ryzen 9 + RTX 4070 Super + 64 ГБ RAM + NVMe. То есть масштабирование — это в первую очередь вертикальный апгрейд (GPU), а архитектура уже к нему готова.</div>
+
+<div class="qa-wrap"><div class="qhead">Возможные вопросы проверяющего</div>
+  <details class="qa"><summary>Почему рендер не укладывается в ×3?</summary><div class="ans">Потому что сейчас он на CPU: WebGL эмулируется программно (SwiftShader), а кодирование — libx264 на процессоре. С рабочим GPU (аппаратный WebGL + кодек NVENC) это узкое место снимается. Код к GPU-режиму готов, упор — в драйвер NVIDIA на текущей VM.</div></details>
+  <details class="qa"><summary>Сервис выдержит всю редакцию одновременно?</summary><div class="ans">Карта и API — да. Рендер — узкое место: один воркер, остальные задачи встают в очередь. Решение — GPU и/или больше воркеров на более мощной машине.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="decisions"><h2><span class="num">19</span>Журнал ключевых решений</h2><p class="lead">Здесь — главные развилки проекта и почему выбран тот, а не иной путь. Часть решений зафиксирована в спецификации, часть принята по ходу разработки и эксплуатации (включая нашу недавнюю работу).</p>
+
+<table>
+  <tr><th>Решение</th><th>Почему так</th><th>Альтернатива и почему её отвергли</th></tr>
+  <tr><td><b>Рендер только на сервере</b> (Puppeteer+FFmpeg)</td><td>Не прерывается при закрытии вкладки, не зависит от ПК пользователя, ставится в очередь</td><td>MediaRecorder в браузере — теряет запись при закрытии, нестабилен</td></tr>
+  <tr><td><b>Render V2:</b> CDP-скринкаст вместо скриншотов</td><td>Заметно быстрее покадровой съёмки по одному PNG</td><td>Постраничные PNG-скриншоты — медленнее и больше I/O</td></tr>
+  <tr><td><b>Покадровый детерминизм GSAP</b></td><td>Останавливаем «часы» и задаём время вручную → анимация не дёргается</td><td>Анимация по реальному времени — давала дрожание кадров</td></tr>
+  <tr><td><b>CPU-рендер</b> (RENDER_USE_GPU=false)</td><td>Драйвер NVIDIA на VM не поднимается; CPU-путь стабилен</td><td>GPU быстрее, но сейчас недоступен (код к нему готов)</td></tr>
+  <tr><td><b>Убрали /dev/nvidia* из Compose</b></td><td>После ребута backend падал из-за отсутствующих устройств GPU</td><td>Оставить привязку — сервис не стартует без драйвера</td></tr>
+  <tr><td><b>Zoom-adaptive тайлы</b> (SQL-функции)</td><td>Дёшево, «живые» данные, ускорение в десятки–сотни раз</td><td>PMTiles — быстрее, но отдельная подсистема и потеря live-правок</td></tr>
+  <tr><td><b>Сессии вместо JWT</b></td><td>Мгновенный отзыв, нет секрета подписи, httpOnly</td><td>JWT — сложнее отозвать, риск утечки секрета</td></tr>
+  <tr><td><b>Очередь в БД</b>, не Redis</td><td>Один воркер, переживает рестарт, меньше сервисов</td><td>Redis/RabbitMQ — избыточны для текущего масштаба</td></tr>
+  <tr><td><b>Photon внешний</b></td><td>Не хранить ~75 ГБ индекса; нужен только при создании точки</td><td>Self-hosted — дорого по диску, отложено в план «Б»</td></tr>
+  <tr><td><b>Nginx на хосте</b>, не в Docker</td><td>Уже есть на сервере, обслуживает и соседний проект</td><td>Docker-nginx — конфликт за порты 80/443</td></tr>
+  <tr><td><b>PixiJS 7.4</b> (pin, не 8.x)</td><td>У 8.x асинхронная инициализация, ломавшая сценарии анимаций</td><td>Обновиться до 8 — риск регрессий без явной выгоды</td></tr>
+  <tr><td><b>Миграция домена .ru → .com</b></td><td>Переезд хостинга; новый конфиг+сертификат, не трогая соседний проект</td><td>—</td></tr>
+</table>
+
+<div class="box note"><div class="t">Что это говорит о проекте</div>
+Сквозной принцип решений — <b>простота и минимализм</b>: брать самый простой инструмент, который закрывает задачу, и усложнять только при доказанной необходимости. Сложность сознательно вложена в одно место — конвейер рендера, потому что именно он создаёт ценность продукта.</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="risks"><h2><span class="num">20</span>Ограничения и риски (честно)</h2><p class="lead">Честный список слабых мест — лучший способ показать зрелость. Если назвать их самому раньше проверяющего, это снимает половину «каверзных» вопросов.</p>
+
+<table>
+  <tr><th>Риск / ограничение</th><th>Серьёзность</th><th>Что с этим делать</th></tr>
+  <tr><td>WebGL/GPU на VM нестабилен (драйвер NVIDIA не грузится, только vmwgfx)</td><td><span class="pill no">высокая</span></td><td>Чинить драйвер/поднять реальный GPU; пока — стабильный CPU-режим</td></tr>
+  <tr><td>CPU-рендер не укладывается в целевой ×3 на длинных роликах</td><td><span class="pill part">средняя</span></td><td>GPU (NVENC) + при необходимости больше воркеров</td></tr>
+  <tr><td>Один воркер рендера — очередь при нагрузке</td><td><span class="pill part">средняя</span></td><td>Несколько воркеров / мощный сервер</td></tr>
+  <tr><td>Зависимость от внешнего Photon</td><td><span class="pill part">низкая</span></td><td>Влияет только на подсказки; есть план self-hosted</td></tr>
+  <tr><td>Лицензия OSM (ODbL) требует атрибуции</td><td><span class="pill part">юридич.</span></td><td>Добавить корректную атрибуцию для публичного эфира</td></tr>
+  <tr><td>Нет отдельного dev-контура (разработка на одном сервере)</td><td><span class="pill part">средняя</span></td><td>Завести staging при росте команды</td></tr>
+  <tr><td>Нет полного E2E-теста пути рендера</td><td><span class="pill part">низкая</span></td><td>Добавить headless E2E в CI</td></tr>
+  <tr><td>Данные карты — статический снимок OSM</td><td><span class="pill part">низкая</span></td><td>Периодически переимпортировать свежий .pbf</td></tr>
+</table>
+
+<div class="box good"><div class="t">Сильные стороны (для баланса)</div>
+Чёткая архитектура с одной точкой входа; устойчивая к сбоям очередь; продуманная безопасность (сессии, CSRF, bcrypt, защита путей); измеримые оптимизации тайлов и маршрутов; единый «снимок» данных, гарантирующий «превью = видео». Проект прошёл 18 фаз с ревью качества кода.</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="faq"><h2><span class="num">21</span>Вопросы на засыпку</h2><p class="lead">Сводка непростых, «общесистемных» вопросов, которые любят задавать на защите. Разверните, чтобы увидеть короткий уверенный ответ.</p>
+
+<div class="qa-wrap"><div class="qhead">Архитектура и решения</div>
+  <details class="qa"><summary>В двух словах: что самое сложное и ценное в проекте?</summary><div class="ans">Конвейер рендера: «настоящий» браузер на сервере покадрово снимает ту же страницу, что видит пользователь, с детерминированной анимацией, и FFmpeg собирает из этого видео. Это даёт гарантию «превью = эфирное видео».</div></details>
+  <details class="qa"><summary>Если бы начинали заново — что изменили бы?</summary><div class="ans">Сразу заложил бы GPU-окружение для рендера (это главное узкое место) и, возможно, PMTiles для базового слоя карты. Остальные решения (сессии, БД-очередь, простой Express) оправдали себя.</div></details>
+  <details class="qa"><summary>Как масштабировать на 10× пользователей?</summary><div class="ans">Карта/API масштабируются легко. Рендер — вертикально (GPU) и горизонтально (несколько воркеров на более мощной машине). Архитектура к этому готова: очередь в БД, рендер уже изолирован в отдельные процессы.</div></details>
+  <details class="qa"><summary>Что будет, если упадёт PostgreSQL?</summary><div class="ans">Сервис деградирует: логин, проекты и новые рендеры недоступны (БД — источник правды). Тайлы частично спасает кэш Nginx. Это осознанная цена за единое надёжное хранилище; защита — бэкапы и мониторинг.</div></details>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Эксплуатация</div>
+  <details class="qa"><summary>Как обновляется приложение?</summary><div class="ans"><code>docker compose build</code> + <code>docker compose up -d</code>. Контейнеры пересобираются, данные в volumes сохраняются.</div></details>
+  <details class="qa"><summary>Что переживает перезагрузку сервера?</summary><div class="ans">Данные БД и видео (volumes), очередь рендера (в БД). Зависшие «running» задачи при старте помечаются ошибкой. Недавно устранили проблему, из-за которой backend не стартовал после ребута (привязка к GPU-устройствам).</div></details>
+  <details class="qa"><summary>Где смотреть, что пошло не так при рендере?</summary><div class="ans">Структурные логи backend (pino) с <code>jobId</code>; статус и текст ошибки — в таблице <code>render_jobs</code>; бенчмарк-скрипт для проверки скорости.</div></details>
+</div>
+
+<div class="qa-wrap"><div class="qhead">Каверзные</div>
+  <details class="qa"><summary>«Превью = видео» — это точно гарантия, а не маркетинг?</summary><div class="ans">Это следствие архитектуры: рендер открывает ту же SPA с тем же «снимком» данных и теми же шрифтами; зум нормализуется под 1920 px. Расхождения возможны лишь на уровне сглаживания JPEG-кадра, не на уровне содержимого.</div></details>
+  <details class="qa"><summary>Не дублируете ли вы логику рисования для превью и для видео?</summary><div class="ans">Нет — это один и тот же код компонентов. Разница только в «источнике времени»: в редакторе — реальные часы, при рендере — номер кадра.</div></details>
+  <details class="qa"><summary>Почему так мало зависимостей — не велосипед ли это?</summary><div class="ans">Наоборот: берём зрелые библиотеки для сложного (карта, анимации, кодирование), а простое (очередь, движение по маршруту) пишем сами, чтобы не тащить тяжёлые премиум-зависимости. Это снижает риски безопасности и стоимость поддержки.</div></details>
+</div>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+  <section class="section" id="glossary"><h2><span class="num">22</span>Глоссарий терминов</h2><p class="lead">Короткий словарь терминов «человеческим языком» — чтобы уверенно отвечать, даже если спросят определение.</p>
+
+<table>
+  <tr><th>Термин</th><th>Простыми словами</th></tr>
+  <tr><td><b>SPA</b> (Single Page Application)</td><td>Сайт-приложение, которое грузится один раз и дальше работает без перезагрузки страниц.</td></tr>
+  <tr><td><b>WebGL</b></td><td>Технология рисования графики через видеокарту прямо в браузере. На ней работают карта и анимации.</td></tr>
+  <tr><td><b>Headless-браузер</b></td><td>«Невидимый» браузер без окна, которым управляет программа (у нас — Puppeteer на сервере).</td></tr>
+  <tr><td><b>CDP</b> (Chrome DevTools Protocol)</td><td>«Служебный пульт» Chrome: открой страницу, выполни код, отдавай кадры экрана.</td></tr>
+  <tr><td><b>Скринкаст</b></td><td>Поток кадров экрана, который Chrome отдаёт по CDP — из них собираем видео.</td></tr>
+  <tr><td><b>FFmpeg</b></td><td>Программа-комбайн для работы с видео; собирает кадры в файл MP4.</td></tr>
+  <tr><td><b>Тайлы / векторные тайлы</b></td><td>Квадратные кусочки карты; «векторные» — это геометрия (линии/контуры), а не картинки.</td></tr>
+  <tr><td><b>MVT</b></td><td>Компактный бинарный формат векторных тайлов.</td></tr>
+  <tr><td><b>PostGIS</b></td><td>Надстройка над PostgreSQL для работы с географией (координаты, площади, пересечения).</td></tr>
+  <tr><td><b>Геокодер</b></td><td>Сервис, превращающий название места в координаты (и обратно).</td></tr>
+  <tr><td><b>Обратный прокси</b></td><td>Сервер-«вахтёр» (Nginx), принимающий все запросы и распределяющий их по внутренним сервисам.</td></tr>
+  <tr><td><b>Контейнер / Docker</b></td><td>Упакованное приложение со всем окружением; запускается одинаково где угодно.</td></tr>
+  <tr><td><b>bcrypt</b></td><td>Алгоритм «запутывания» паролей: в базе хранится не пароль, а его необратимый хэш.</td></tr>
+  <tr><td><b>CSRF</b></td><td>Атака «поддельный запрос от имени пользователя»; у нас закрыта парой cookie + заголовок.</td></tr>
+  <tr><td><b>Детерминизм</b></td><td>Свойство «одинаковый вход → одинаковый результат». Для рендера: кадр секунды N всегда одинаков.</td></tr>
+  <tr><td><b>Рендер</b></td><td>Процесс «отрисовки» итогового видео из проекта пользователя.</td></tr>
+  <tr><td><b>SLA</b></td><td>Целевой норматив (у нас — обработка рендера в пределах ×3 от длительности).</td></tr>
+  <tr><td><b>Snapshot («снимок»)</b></td><td>JSON-описание всего проекта карты, по которому строится видео.</td></tr>
+</table>
+
+<hr class="soft">
+<p class="mini">Документ описывает состояние проекта Mapvideo на момент подготовки к защите. Создан как статический HTML-файл и не влияет на работу сервиса. Навигация: оглавление слева, ссылки «↑ К оглавлению» после каждого раздела, кнопка «↑» внизу справа, поиск по странице — <span class="kbd">Ctrl</span> + <span class="kbd">F</span>.</p>
+<a class="toplink" href="#top">↑ К оглавлению</a></section>
+</div>
+</main>
+</div>
+<script>
+(function(){
+  // ---- back to top ----
+  var totop=document.getElementById('totop');
+  window.addEventListener('scroll',function(){
+    if(window.scrollY>400) totop.classList.add('show'); else totop.classList.remove('show');
+  });
+  totop.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+
+  // ---- nav active highlight ----
+  var links=Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var map={};
+  links.forEach(function(a){var id=a.getAttribute('href').slice(1); map[id]=a;});
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(a){a.classList.remove('active');});
+        var a=map[e.target.id]; if(a){a.classList.add('active'); }
+      }
+    });
+  },{rootMargin:'-10% 0px -80% 0px',threshold:0});
+  document.querySelectorAll('section.section').forEach(function(s){obs.observe(s);});
+
+  // ---- diagram pan/zoom + node focus ----
+  window.initDiagram=function(){
+    var vp=document.getElementById('arch-vp');
+    var svg=document.getElementById('arch-svg');
+    var desc=document.getElementById('arch-desc');
+    if(!vp||!svg) return;
+    var scale=1, tx=0, ty=0, dragging=false, sx=0, sy=0, moved=false;
+    function apply(){svg.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';}
+    function zoomAt(cx,cy,factor){
+      var ns=Math.min(3,Math.max(0.4,scale*factor));
+      var k=ns/scale;
+      tx=cx-(cx-tx)*k; ty=cy-(cy-ty)*k; scale=ns; apply();
+    }
+    vp.addEventListener('wheel',function(e){
+      e.preventDefault();
+      var r=vp.getBoundingClientRect();
+      zoomAt(e.clientX-r.left,e.clientY-r.top, e.deltaY<0?1.12:1/1.12);
+    },{passive:false});
+    vp.addEventListener('mousedown',function(e){dragging=true;moved=false;sx=e.clientX-tx;sy=e.clientY-ty;vp.classList.add('grabbing');});
+    window.addEventListener('mousemove',function(e){if(!dragging)return;tx=e.clientX-sx;ty=e.clientY-sy;moved=true;apply();});
+    window.addEventListener('mouseup',function(){dragging=false;vp.classList.remove('grabbing');});
+    document.getElementById('arch-in').addEventListener('click',function(){zoomAt(vp.clientWidth/2,vp.clientHeight/2,1.2);});
+    document.getElementById('arch-out').addEventListener('click',function(){zoomAt(vp.clientWidth/2,vp.clientHeight/2,1/1.2);});
+    document.getElementById('arch-reset').addEventListener('click',function(){scale=1;tx=0;ty=0;apply();clearFocus();});
+
+    var nodes=Array.prototype.slice.call(svg.querySelectorAll('.node'));
+    var edges=Array.prototype.slice.call(svg.querySelectorAll('.edge'));
+    function clearFocus(){
+      nodes.forEach(function(n){n.classList.remove('dim');});
+      edges.forEach(function(ed){ed.classList.remove('dim');ed.classList.remove('hot');});
+      desc.innerHTML='<b>Кликните по любому блоку схемы</b>, чтобы увидеть его роль и связанные потоки данных. Колесо мыши — масштаб, перетаскивание — сдвиг.';
+    }
+    function focus(node){
+      var id=node.getAttribute('data-id');
+      nodes.forEach(function(n){n.classList.add('dim');});
+      node.classList.remove('dim');
+      edges.forEach(function(ed){
+        var f=ed.getAttribute('data-from'), t=ed.getAttribute('data-to');
+        if(f===id||t===id){ed.classList.add('hot');ed.classList.remove('dim');
+          if(map[f]) {} nodes.forEach(function(n){var nid=n.getAttribute('data-id'); if(nid===f||nid===t)n.classList.remove('dim');});
+        } else {ed.classList.add('dim');ed.classList.remove('hot');}
+      });
+      desc.innerHTML='<b>'+node.getAttribute('data-title')+'</b><br>'+node.getAttribute('data-desc');
+    }
+    nodes.forEach(function(n){
+      n.addEventListener('click',function(ev){ if(moved){return;} ev.stopPropagation(); focus(n);});
+    });
+    vp.addEventListener('click',function(e){ if(e.target===vp||e.target===svg){clearFocus();}});
+    clearFocus();
+  };
+})();
+</script>
+</body>
+</html>
