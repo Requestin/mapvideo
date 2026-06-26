@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditorState } from '../state/editor-state';
 import { useEditorMap } from '../hooks/use-editor-map';
 import { GeoTitleSettingsPopover } from './geo-title-settings-popover';
@@ -29,12 +29,9 @@ export function BottomToolbar({
 }: BottomToolbarProps): JSX.Element {
   const {
     elements,
-    theme,
-    setTheme,
     routeBuildMode,
     setRouteBuildMode,
     videoSettings,
-    geoTitle,
     updateGeoTitle,
     updateVideoSettings,
   } = useEditorState();
@@ -44,8 +41,37 @@ export function BottomToolbar({
   const lock = renderInProgress;
   const [durationOpen, setDurationOpen] = useState(false);
   const [breathingOpen, setBreathingOpen] = useState(videoSettings.cameraBreathing > 0);
+  const [breathingDraft, setBreathingDraft] = useState(videoSettings.cameraBreathing);
   const [geoTitleOpen, setGeoTitleOpen] = useState(false);
   const breathingMemoryRef = useRef(videoSettings.cameraBreathing > 0 ? videoSettings.cameraBreathing : 25);
+  const geoTitleTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    setBreathingDraft(videoSettings.cameraBreathing);
+  }, [videoSettings.cameraBreathing]);
+
+  const commitBreathing = useCallback(
+    (raw: number): void => {
+      const next = Math.max(0, Math.min(100, Math.round(raw)));
+      if (next > 0) breathingMemoryRef.current = next;
+      if (next === 0) {
+        const map = mapRef.current;
+        if (map && videoSettings.cameraBreathingReferenceZoom != null) {
+          map.setZoom(videoSettings.cameraBreathingReferenceZoom);
+        }
+        updateVideoSettings({
+          cameraBreathing: 0,
+          cameraBreathingReferenceZoom: null,
+        });
+        setBreathingOpen(false);
+        setBreathingDraft(0);
+        return;
+      }
+      if (next === videoSettings.cameraBreathing) return;
+      updateVideoSettings({ cameraBreathing: next });
+    },
+    [mapRef, updateVideoSettings, videoSettings.cameraBreathing, videoSettings.cameraBreathingReferenceZoom]
+  );
 
   const toggleBreathing = (): void => {
     if (videoSettings.cameraBreathing > 0) {
@@ -56,6 +82,7 @@ export function BottomToolbar({
       }
       updateVideoSettings({ cameraBreathing: 0, cameraBreathingReferenceZoom: null });
       setBreathingOpen(false);
+      setBreathingDraft(0);
       return;
     }
     const referenceZoom = mapRef.current?.getZoom() ?? videoSettings.cameraBreathingReferenceZoom ?? null;
@@ -64,6 +91,7 @@ export function BottomToolbar({
       cameraBreathing: nextStrength,
       cameraBreathingReferenceZoom: referenceZoom,
     });
+    setBreathingDraft(nextStrength);
     setBreathingOpen(true);
   };
 
@@ -122,7 +150,10 @@ export function BottomToolbar({
           aria-pressed={videoSettings.cameraBreathing > 0}
           title="Дыхание камеры"
         >
-          🌬 Дыхание
+          <span className="bottom-toolbar__icon" aria-hidden="true">
+            📷
+          </span>
+          Дыхание
         </button>
         {breathingOpen && (
           <label className="bottom-toolbar__slider-wrap" aria-label="Сила дыхания камеры">
@@ -131,52 +162,36 @@ export function BottomToolbar({
               min={0}
               max={100}
               step={1}
-              value={videoSettings.cameraBreathing}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                if (next > 0) breathingMemoryRef.current = next;
-                updateVideoSettings({ cameraBreathing: next });
-                if (next === 0) {
-                  const map = mapRef.current;
-                  if (map && videoSettings.cameraBreathingReferenceZoom != null) {
-                    map.setZoom(videoSettings.cameraBreathingReferenceZoom);
-                  }
-                  updateVideoSettings({ cameraBreathingReferenceZoom: null });
-                  setBreathingOpen(false);
-                }
-              }}
+              value={breathingDraft}
+              onChange={(e) => setBreathingDraft(Number(e.target.value))}
+              onPointerUp={() => commitBreathing(breathingDraft)}
+              onKeyUp={() => commitBreathing(breathingDraft)}
+              onBlur={() => commitBreathing(breathingDraft)}
               disabled={lock}
             />
           </label>
         )}
       </div>
       <div className="bottom-toolbar__group">
-        <label className="bottom-toolbar__checkbox">
-          <input
-            type="checkbox"
-            checked={geoTitle.enabled}
-            disabled={lock}
-            onChange={(e) => {
-              const enabled = e.target.checked;
-              updateGeoTitle({ enabled });
-              if (!enabled) setGeoTitleOpen(false);
-            }}
-          />
-          GEO титр
-        </label>
         <button
+          ref={geoTitleTriggerRef}
           type="button"
           className={`app-button${geoTitleOpen ? ' app-button--primary' : ''}`}
-          disabled={lock || !geoTitle.enabled}
+          disabled={lock}
           onClick={() => setGeoTitleOpen((v) => !v)}
           aria-pressed={geoTitleOpen}
           title="Настройки GEO титра"
         >
-          🏷 GEO титр
+          🏠 GEO титр
         </button>
         <GeoTitleSettingsPopover
-          open={geoTitleOpen && geoTitle.enabled}
+          open={geoTitleOpen}
           onClose={() => setGeoTitleOpen(false)}
+          onToggleEnabled={(enabled) => {
+            updateGeoTitle({ enabled });
+            if (!enabled) setGeoTitleOpen(false);
+          }}
+          triggerRef={geoTitleTriggerRef}
         />
       </div>
       <button type="button" className="app-button" onClick={onOpenVideoSettings} disabled={lock}>
@@ -184,12 +199,13 @@ export function BottomToolbar({
       </button>
       <button
         type="button"
-        className="app-button"
-        disabled={lock}
-        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        className="app-button bottom-toolbar__theme-toggle"
+        disabled
         title="Переключить тему карты"
+        tabIndex={-1}
+        aria-hidden="true"
       >
-        {theme === 'dark' ? '🌙 Тёмная' : '☀ Светлая'}
+        🌙 Тёмная
       </button>
       <div className="bottom-toolbar__spacer" />
       <button

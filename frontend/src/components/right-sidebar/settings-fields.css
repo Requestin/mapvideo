@@ -51,7 +51,8 @@
 
 .settings-field__slider {
   width: 100%;
-  accent-color: var(--color-accent);
+  display: block;
+  margin: 0;
 }
 
 .settings-field__color {

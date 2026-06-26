@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { AxiosError } from 'axios';
 import { fetchFonts, type FontEntry } from '../api/fonts';
 import { geocodeSearch, type GeocodeResult } from '../api/geocode';
@@ -27,11 +27,15 @@ function weightsForFamily(fonts: FontEntry[], family: string): FontEntry[] {
 export interface GeoTitleSettingsPopoverProps {
   open: boolean;
   onClose: () => void;
+  onToggleEnabled: (enabled: boolean) => void;
+  triggerRef?: RefObject<HTMLElement | null>;
 }
 
 export function GeoTitleSettingsPopover({
   open,
   onClose,
+  onToggleEnabled,
+  triggerRef,
 }: GeoTitleSettingsPopoverProps): JSX.Element | null {
   const { geoTitle, updateGeoTitle } = useEditorState();
   const { showToast } = useToast();
@@ -68,6 +72,7 @@ export function GeoTitleSettingsPopover({
     const onMouseDown = (e: MouseEvent): void => {
       const target = e.target as Node | null;
       if (!target) return;
+      if (triggerRef?.current?.contains(target)) return;
       if (!popoverRef.current?.contains(target)) onClose();
     };
     const onEsc = (e: KeyboardEvent): void => {
@@ -79,7 +84,7 @@ export function GeoTitleSettingsPopover({
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('keydown', onEsc);
     };
-  }, [onClose, open]);
+  }, [onClose, open, triggerRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -165,6 +170,17 @@ export function GeoTitleSettingsPopover({
       aria-label="Настройки GEO титра"
     >
       <p className="geo-title-settings-popover__title">ГЕО титр</p>
+      <label className="geo-title-settings-popover__checkbox geo-title-settings-popover__checkbox--primary">
+        <input
+          type="checkbox"
+          checked={geoTitle.enabled}
+          onChange={(e) => {
+            const enabled = e.target.checked;
+            onToggleEnabled(enabled);
+          }}
+        />
+        Включить GEO титр
+      </label>
 
       <label className="geo-title-settings-popover__field">
         <span>Локация</span>

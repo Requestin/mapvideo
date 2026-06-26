@@ -169,11 +169,8 @@ export function createRouteRender(settings: RouteSettings): RouteRender {
         // Все PNG нарисованы носом вправо (SPEC §Ассеты), поэтому
         // rotation = angle без поправок.
         icon.rotation = sample.angle;
-        // When moving into the left hemisphere (90..270 degrees), keep icon
-        // upright by mirroring vertically while preserving the pixel size set
-        // by sizeSpriteToPixels().
-        const absScaleY = Math.abs(icon.scale.y || 1);
-        icon.scale.y = Math.cos(sample.angle) < 0 ? -absScaleY : absScaleY;
+        // Без зеркалирования по Y угол меняется непрерывно и не даёт
+        // визуального рывка при пересечении 90/270 градусов.
         icon.alpha = sample.alpha;
       }
     }

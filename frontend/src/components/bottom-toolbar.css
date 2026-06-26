@@ -20,18 +20,13 @@
   gap: 8px;
 }
 
-.bottom-toolbar__checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--color-text-primary);
+.bottom-toolbar__icon {
   font-size: 13px;
-  white-space: nowrap;
+  line-height: 1;
 }
 
-.bottom-toolbar__checkbox input[type='checkbox'] {
-  width: 14px;
-  height: 14px;
+.bottom-toolbar__theme-toggle {
+  display: none;
 }
 
 .bottom-toolbar__slider-wrap {
@@ -49,6 +44,8 @@
 
 .bottom-toolbar__slider-wrap input[type='range'] {
   width: 100%;
+  display: block;
+  margin: 0;
 }
 
 /* task12: enlarge toolbar buttons ~+50% (padding 8/14 → 12/20,

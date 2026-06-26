@@ -5,8 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 // MapLibre and PixiJS both need a real WebGL context; jsdom has none, so
 // we mock them out with minimal shims that record invocations. The
-// EditorPage smoke-test only cares about chrome rendering + theme toggle
-// behaviour, not about pixel output.
+// EditorPage smoke-test only cares about chrome rendering, not pixel output.
 vi.mock('maplibre-gl', async () => {
   const mapInstance = {
     flyTo: vi.fn(),
@@ -191,12 +190,10 @@ describe('EditorPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('theme toggle switches label between Тёмная and Светлая', async () => {
+  it('theme toggle is hidden from toolbar', () => {
     renderPage();
-    const user = userEvent.setup();
-    const toggle = screen.getByRole('button', { name: /тёмная/i });
-    await user.click(toggle);
-    expect(screen.getByRole('button', { name: /светлая/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /тёмная/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /светлая/i })).not.toBeInTheDocument();
   });
 
   it('opens video settings modal from toolbar (task7)', async () => {
