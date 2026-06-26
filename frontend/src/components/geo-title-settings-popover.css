@@ -52,6 +52,11 @@
   font-size: 13px;
 }
 
+.geo-title-settings-popover__checkbox--primary {
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
 .geo-title-settings-popover__status {
   margin: 4px 0;
   color: var(--color-text-secondary);

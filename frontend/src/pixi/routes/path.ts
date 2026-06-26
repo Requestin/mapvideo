@@ -143,10 +143,34 @@ export function sampleAlongPolyline(
   }
   if (total === 0) return { x: path[0].x, y: path[0].y, angle: 0 };
   const target = Math.max(0, Math.min(1, t)) * total;
+  const current = samplePointAtDistance(path, segLens, total, target);
+  if (!current) return null;
+
+  // Местная касательная по соседним точкам вдоль длины полилинии.
+  // Это сглаживает угол на стыках сегментов и убирает визуальные рывки.
+  const tangentWindow = Math.max(0.5, Math.min(6, total * 0.04));
+  const prev = samplePointAtDistance(path, segLens, total, target - tangentWindow) ?? current;
+  const next = samplePointAtDistance(path, segLens, total, target + tangentWindow) ?? current;
+  const tangentDx = next.x - prev.x;
+  const tangentDy = next.y - prev.y;
+  const angle =
+    tangentDx === 0 && tangentDy === 0 ? current.angle : Math.atan2(tangentDy, tangentDx);
+
+  return { x: current.x, y: current.y, angle };
+}
+
+function samplePointAtDistance(
+  path: { x: number; y: number }[],
+  segLens: number[],
+  total: number,
+  distance: number
+): { x: number; y: number; angle: number } | null {
+  if (path.length < 2 || segLens.length === 0) return null;
+  const clamped = Math.max(0, Math.min(total, distance));
   let acc = 0;
   for (let i = 0; i < segLens.length; i++) {
-    if (acc + segLens[i] >= target) {
-      const local = segLens[i] === 0 ? 0 : (target - acc) / segLens[i];
+    if (acc + segLens[i] >= clamped) {
+      const local = segLens[i] === 0 ? 0 : (clamped - acc) / segLens[i];
       const a = path[i];
       const b = path[i + 1];
       return {

@@ -151,6 +151,12 @@ describe('pixi/routes/path', () => {
   });
 
   describe('sampleAlongPolyline', () => {
+    const angleDelta = (a: number, b: number): number => {
+      let d = Math.abs(a - b);
+      while (d > Math.PI) d = Math.abs(d - 2 * Math.PI);
+      return d;
+    };
+
     it('returns null for <2 points', () => {
       expect(sampleAlongPolyline([{ x: 0, y: 0 }], 0.5)).toBeNull();
     });
@@ -182,6 +188,19 @@ describe('pixi/routes/path', () => {
       expect(mid.y).toBeCloseTo(5, 9);
       // Angle of the north-going leg is π/2.
       expect(mid.angle).toBeCloseTo(Math.PI / 2, 9);
+    });
+
+    it('keeps angle transitions smooth near segment joints', () => {
+      const path = [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+      ];
+      const beforeJoint = sampleAlongPolyline(path, 0.499)!;
+      const atJoint = sampleAlongPolyline(path, 0.5)!;
+      const afterJoint = sampleAlongPolyline(path, 0.501)!;
+      expect(angleDelta(beforeJoint.angle, atJoint.angle)).toBeLessThan(0.8);
+      expect(angleDelta(atJoint.angle, afterJoint.angle)).toBeLessThan(0.8);
     });
 
     it('degenerate zero-length path returns the shared origin', () => {

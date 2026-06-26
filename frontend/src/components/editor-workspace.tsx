@@ -454,17 +454,46 @@ export function EditorWorkspace(): JSX.Element {
     }
     const map = mapRef.current;
     if (!map) return;
+    const canvas = typeof map.getCanvas === 'function' ? map.getCanvas() : null;
+    const updateFromClientPoint = (clientX: number, clientY: number): void => {
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+        routePreviewCursorRef.current = null;
+        return;
+      }
+      routePreviewCursorRef.current = { x, y };
+    };
     const onMove = (e: import('maplibre-gl').MapMouseEvent) => {
       routePreviewCursorRef.current = { x: e.point.x, y: e.point.y };
+    };
+    const onCanvasPointerMove = (e: PointerEvent) => {
+      updateFromClientPoint(e.clientX, e.clientY);
+    };
+    const onWindowPointerMove = (e: PointerEvent) => {
+      if ((e.buttons & 1) === 0 && (e.buttons & 2) === 0) return;
+      updateFromClientPoint(e.clientX, e.clientY);
     };
     const onLeave = () => {
       routePreviewCursorRef.current = null;
     };
     map.on('mousemove', onMove);
     map.on('mouseout', onLeave);
+    if (canvas) {
+      canvas.addEventListener('pointermove', onCanvasPointerMove);
+      canvas.addEventListener('pointerleave', onLeave);
+    }
+    window.addEventListener('pointermove', onWindowPointerMove);
     return () => {
       map.off('mousemove', onMove);
       map.off('mouseout', onLeave);
+      if (canvas) {
+        canvas.removeEventListener('pointermove', onCanvasPointerMove);
+        canvas.removeEventListener('pointerleave', onLeave);
+      }
+      window.removeEventListener('pointermove', onWindowPointerMove);
       routePreviewCursorRef.current = null;
     };
   }, [routeBuildMode, mapRef]);

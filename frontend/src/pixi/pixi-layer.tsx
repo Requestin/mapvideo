@@ -561,7 +561,7 @@ function syncPositions(
         const projected = map.project([path[i].lng, path[i].lat]);
         pixels[i] = { x: projected.x, y: projected.y };
       }
-      const legsForIcons = (rec.simplifiedLegs ?? rawLegs)
+      const legsForIcons = rawLegs
         .filter((leg) => leg.length >= 2)
         .map((leg) =>
           leg.map((pt) => {
