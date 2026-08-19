@@ -1,6 +1,6 @@
 # Спецификация сервиса Mapvideo
 
-## https://mapvideo.com
+## https://mapvideo.gyhyry.com
 
 ### Если хотите протестировать сервис, обратитесь в Telegram: @Requestin
 
